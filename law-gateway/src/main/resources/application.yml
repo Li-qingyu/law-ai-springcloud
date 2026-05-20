@@ -1,0 +1,75 @@
+server:
+  port: 80
+
+spring:
+  application:
+    name: law-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        # 用户服务路由
+        - id: user-service
+          uri: lb://law-user-service
+          predicates:
+            - Path=/api/user/**, /api/admin/user/**
+          filters:
+            - StripPrefix=0
+
+        # 法典服务路由
+        - id: law-service
+          uri: lb://law-law-service
+          predicates:
+            - Path=/api/law/**, /api/admin/law/**
+          filters:
+            - StripPrefix=0
+
+        # AI服务路由
+        - id: ai-service
+          uri: lb://law-ai-service
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - StripPrefix=0
+
+        # 通用服务路由
+        - id: common-service
+          uri: lb://law-common-service
+          predicates:
+            - Path=/api/carousel/**, /api/upload/**, /api/workspace/**
+          filters:
+            - StripPrefix=0
+
+      # 全局跨域配置
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: 0
+
+# 白名单路径（不需要鉴权）
+gateway:
+  whitelist:
+    - /api/user/login
+    - /api/user/register
+    - /api/user/send-code
+    - /api/carousel/list
+    - /api/law/books
+    - /api/law/cases
+
+# JWT 配置
+law:
+  jwt:
+    admin-secret-key: ${JWT_SECRET:lawai}

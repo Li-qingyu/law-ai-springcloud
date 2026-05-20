@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: law-user-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+      config:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+        file-extension: yml
+        group: DEFAULT_GROUP

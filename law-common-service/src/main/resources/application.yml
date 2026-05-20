@@ -1,0 +1,29 @@
+server:
+  port: 8084
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/law_consultation?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    druid:
+      initial-size: 5
+      max-active: 20
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: org.law.common.service.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    org.law.common.service.mapper: debug
+
+aliyun:
+  oss:
+    endpoint: oss-cn-beijing.aliyuncs.com
+    bucket-name: ${BUCKET_NAME:test-bucket}
+    access-key-id: ${OSS_ACCESS_KEY_ID:test-key}
+    access-key-secret: ${OSS_ACCESS_KEY_SECRET:test-secret}
