@@ -2,6 +2,11 @@ server:
   port: 8082
 
 spring:
+  application:
+    name: law-law-service
+  config:
+    import:
+      - nacos:application
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${DB_HOST:localhost}:3306/law_consultation?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
@@ -10,7 +15,12 @@ spring:
     druid:
       initial-size: 5
       max-active: 20
-
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+      config:
+        server-addr: ${NACOS_ADDR:localhost:8848}
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: org.law.law.entity
