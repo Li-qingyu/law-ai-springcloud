@@ -2,6 +2,17 @@ server:
   port: 8083
 
 spring:
+  application:
+    name: law-ai-service
+  config:
+    import:
+      - nacos:application
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+      config:
+        server-addr: ${NACOS_ADDR:localhost:8848}
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${DB_HOST:localhost}:3306/law_consultation?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
@@ -19,11 +30,11 @@ spring:
         options:
           model: text-embedding-v3
           dimensions: 1024
-    vectorstore:
-      milvus:
-        databaseName: law_ai
-        url: http://${MILVUS_HOST:localhost}:19530
-        embeddingDimension: 1024
+#    vectorstore:
+#      milvus:
+#        databaseName: law_ai
+#        url: http://${MILVUS_HOST:localhost}:19530
+#        embeddingDimension: 1024
   data:
     redis:
       host: ${REDIS_HOST:localhost}
