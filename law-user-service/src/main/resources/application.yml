@@ -6,13 +6,14 @@ spring:
     name: law-user-service
   config:
     import:
-      - nacos:application
+      - nacos:law-user-service.yml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:
+      serverAddr: ${NACOS_ADDR:localhost:8848}
       discovery:
-        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: true
       config:
-        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: true
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${DB_HOST:localhost}:3306/law_consultation?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8

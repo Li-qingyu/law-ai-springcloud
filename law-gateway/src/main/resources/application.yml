@@ -4,14 +4,17 @@ server:
 spring:
   application:
     name: law-gateway
+  config:
+    import:
+      - nacos:law-gateway.yml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:
+      serverAddr: ${NACOS_ADDR:localhost:8848}
       discovery:
-        server-addr: ${NACOS_ADDR:localhost:8848}
+        enabled: true
+      config:
+        enabled: true
     gateway:
-      discovery:
-        locator:
-          enabled: false
       routes:
         # 用户服务路由
         - id: user-service
@@ -44,14 +47,15 @@ spring:
             - Path=/api/carousel/**, /api/upload/**, /api/workspace/**
           filters:
             - StripPrefix=0
-
-      # 全局跨域配置
       globalcors:
         cors-configurations:
           '[/**]':
             allowedOrigins: "*"
             allowedMethods: "*"
             allowedHeaders: "*"
+      discovery:
+        locator:
+          enabled: false
 
   data:
     redis:
