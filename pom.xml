@@ -39,7 +39,7 @@
         <pagehelper>2.1.1</pagehelper>
         <aliyun.sdk.oss>3.17.4</aliyun.sdk.oss>
         <knife4j>3.0.2</knife4j>
-        <jjwt>0.9.1</jjwt>
+        <jjwt>0.12.6</jjwt>
         <milvus>2.4.5</milvus>
     </properties>
 
@@ -114,11 +114,25 @@
                 <version>${knife4j}</version>
             </dependency>
 
-            <!-- JWT -->
+            <!-- JWT API -->
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt</artifactId>
+                <artifactId>jjwt-api</artifactId>
                 <version>${jjwt}</version>
+            </dependency>
+            <!-- JWT Impl (runtime only) -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt}</version>
+                <scope>runtime</scope>
+            </dependency>
+            <!-- JWT Jackson (runtime only) -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt}</version>
+                <scope>runtime</scope>
             </dependency>
 
             <!-- Aliyun OSS -->

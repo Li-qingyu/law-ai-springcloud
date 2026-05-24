@@ -2,8 +2,11 @@ package org.lawgateway.filter;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -16,10 +19,12 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
 @Component
+@ConfigurationProperties(prefix = "gateway")
 public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     @Value("${law.jwt.admin-secret-key:lawai}")
@@ -28,8 +33,15 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     @Value("${law.jwt.admin-token-name:token}")
     private String tokenName;
 
-    @Value("${gateway.whitelist:}")
-    private List<String> whitelist;
+    private List<String> whitelist = new ArrayList<>();
+
+    public void setWhitelist(List<String> whitelist) {
+        this.whitelist = whitelist;
+    }
+
+    public List<String> getWhitelist() {
+        return whitelist;
+    }
 
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
@@ -40,6 +52,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
         // 白名单放行
         if (isWhitelist(path)) {
+            log.info(path + "是白名单");
             return chain.filter(exchange);
         }
 
@@ -55,9 +68,10 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         // 解析token
         try {
             Claims claims = Jwts.parser()
-                    .setSigningKey(secretKey.getBytes(StandardCharsets.UTF_8))
-                    .parseClaimsJws(token)
-                    .getBody();
+                    .verifyWith(Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8)))
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
 
             Integer userId = Integer.valueOf(claims.get("userId").toString());
             log.info("JWT校验通过，用户id: {}, 路径: {}", userId, path);

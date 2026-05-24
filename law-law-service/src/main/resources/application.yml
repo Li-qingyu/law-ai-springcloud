@@ -6,31 +6,15 @@ spring:
     name: law-law-service
   config:
     import:
+      - nacos:common.yml?group=DEFAULT_GROUP&refreshEnabled=true
+      - nacos:common-security.yml?group=DEFAULT_GROUP&refreshEnabled=true
       - nacos:law-law-service.yml?group=DEFAULT_GROUP&refreshEnabled=true
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${DB_HOST:localhost}:3306/law_consultation?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
-    druid:
-      initial-size: 5
-      max-active: 20
   cloud:
     nacos:
       serverAddr: ${NACOS_ADDR:localhost:8848}
       namespace: ${NACOS_NAMESPACE:}
       discovery:
         group: DEFAULT_GROUP
-      config:
-        group: DEFAULT_GROUP
-        fileExtension: yml
-        shared-configs:
-          - dataId: common.yml
-            group: DEFAULT_GROUP
-            refresh: true
-          - dataId: common-security.yml
-            group: DEFAULT_GROUP
-            refresh: true
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: org.law.law.entity

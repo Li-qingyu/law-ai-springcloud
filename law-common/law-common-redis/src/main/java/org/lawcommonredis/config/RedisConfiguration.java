@@ -2,6 +2,7 @@ package org.lawcommonredis.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -9,6 +10,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration
 @Slf4j
+@ComponentScan(basePackages = "org.lawcommonredis")
 public class RedisConfiguration {
     @Bean
     public RedisTemplate redisTemplate(RedisConnectionFactory redisConnectionFactory){

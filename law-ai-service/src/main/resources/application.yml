@@ -1,24 +1,21 @@
 server:
   port: 8083
 
+
 spring:
   application:
     name: law-ai-service
   config:
     import:
+      - nacos:common.yml?group=DEFAULT_GROUP&refreshEnabled=true
+      - nacos:common-security.yml?group=DEFAULT_GROUP&refreshEnabled=true
       - nacos:law-ai-service.yml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:
       serverAddr: ${NACOS_ADDR:localhost:8848}
+      namespace: ${NACOS_NAMESPACE:}
       discovery:
-        enabled: true
-      config:
-        enabled: true
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${DB_HOST:localhost}:3306/law_consultation?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
+        group: DEFAULT_GROUP
   ai:
     openai:
       base-url: https://dashscope.aliyuncs.com/compatible-mode
@@ -31,22 +28,10 @@ spring:
         options:
           model: text-embedding-v3
           dimensions: 1024
-#    vectorstore:
-#      milvus:
-#        databaseName: law_ai
-#        url: http://${MILVUS_HOST:localhost}:19530
-#        embeddingDimension: 1024
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      database: 2
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: org.law.ai.entity
-  configuration:
-    map-underscore-to-camel-case: true
 
 logging:
   level:
