@@ -10,8 +10,7 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication
 @EnableDiscoveryClient
 @EnableFeignClients
-//@MapperScan("org.law.user.mapper")
-//@ComponentScan(basePackages = {"org.law.user", "org.law.common"})
+@MapperScan("org.lawuserservice.mapper")
 public class LawUserServiceApplication {
 
     public static void main(String[] args) {

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawuserservice.mapper.UserMapper">
+    <insert id="insert" parameterType="org.lawcommoncore.entity.User">
+        insert into user
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            username,
+            password,
+            create_time,
+            update_time,
+            <if test="email != null and email!=''">email,</if>
+            <if test="phone != null and phone!=''">phone,</if>
+            <if test="status != null">status,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            #{username},
+            #{password},
+            #{createTime},
+            #{updateTime},
+            <if test="email != null and email!=''">#{email},</if>
+            <if test="phone != null and phone!=''">#{phone},</if>
+            <if test="status != null">#{status},</if>
+        </trim>
+    </insert>
+    <update id="update">
+        update user
+        <set>
+            <if test="username != null and username != ''">username=#{username},</if>
+            <if test="password != null and password != ''">password=#{password},</if>
+            <if test="email != null and email != ''">email=#{email},</if>
+            <if test="phone != null and phone != ''">phone=#{phone},</if>
+            <if test="status != null">status=#{status},</if>
+            <if test="updateTime != null">update_time=#{updateTime},</if>
+        </set> where id=#{id}
+    </update>
+    <delete id="delete">
+        delete from user where id=#{id}
+    </delete>
+
+
+    <select id="selectByUsername" resultType="org.lawcommoncore.entity.User">
+        select * from user where username=#{username}
+    </select>
+    <select id="list" resultType="org.lawcommoncore.entity.User">
+        select * from user
+        <where>
+            <if test="name!=null and name!=''">
+                and username like concat('%',#{name},'%')
+            </if>
+        </where>order by update_time desc
+    </select>
+    <select id="selectByEmail" resultType="java.lang.Boolean" parameterType="java.lang.String">
+        select exists(select * from user where email=#{email})
+
+    </select>
+    <select id="get" resultType="org.lawcommoncore.entity.User">
+        select * from user where id=#{id}
+    </select>
+</mapper>

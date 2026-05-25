@@ -15,21 +15,5 @@ spring:
       namespace: ${NACOS_NAMESPACE:}
       discovery:
         group: DEFAULT_GROUP
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${DB_HOST:localhost}:3306/law_consultation?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:root}
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      database: 2
 
-mybatis:
-  mapper-locations: classpath:mapper/*.xml
-  type-aliases-package: org.law.user.entity
 
-logging:
-  level:
-    org.law.user.mapper: debug

@@ -24,14 +24,14 @@ spring:
             - id: user-service
               uri: lb://law-user-service
               predicates:
-                - Path=/api/user/**, /api/admin/user/**, /api/test/**
+                - Path=/admin/users/**, /test/**,/login,/register,/sendEmailCode,/resetPassword
               filters:
                 - StripPrefix=0
             # 法典服务路由
             - id: law-service
               uri: lb://law-law-service
               predicates:
-                - Path=/api/law/**, /api/admin/law/**
+                - Path=/law/**, /admin/law/**
               filters:
                 - StripPrefix=0
 
@@ -39,7 +39,7 @@ spring:
             - id: ai-service
               uri: lb://law-ai-service
               predicates:
-                - Path=/api/ai/**
+                - Path=/ai/**
               filters:
                 - StripPrefix=0
 
@@ -47,7 +47,7 @@ spring:
             - id: common-service
               uri: lb://law-common-service
               predicates:
-                - Path=/api/carousel/**, /api/upload/**, /api/workspace/**
+                - Path=/carousel/**, /upload/**, /workspace/**
               filters:
                 - StripPrefix=0
           globalcors:
@@ -69,10 +69,11 @@ spring:
 # 白名单路径（不需要鉴权）
 gateway:
   whitelist:
-    - /api/user/login
-    - /api/user/register
-    - /api/user/send-code
+    - /login
+    - /register
+    - /sendEmailCode
+    - /resetPassword
     - /api/carousel/list
     - /api/law/books
     - /api/law/cases
-    - /api/test/public
+    - /test/public

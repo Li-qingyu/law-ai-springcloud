@@ -29,7 +29,8 @@ public class SecurityAutoConfiguration implements WebMvcConfigurer {
                         "/register",
                         "/sendEmailCode",
                         "/upload/**",
-                        "/api/test/public"
+                        "/test/public",
+                        "/resetPassword"
                 );
     }
 }
