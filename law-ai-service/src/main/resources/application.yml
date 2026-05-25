@@ -28,7 +28,11 @@ spring:
         options:
           model: text-embedding-v3
           dimensions: 1024
-
+    vectorstore:
+      milvus:
+        databaseName: law_ai
+        url: http://localhost:19530
+        embeddingDimension: 1024
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: org.law.ai.entity

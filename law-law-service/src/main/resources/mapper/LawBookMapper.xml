@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawlawservice.mapper.LawBookMapper">
+
+
+    <select id="queryById" resultType="org.lawcommoncore.entity.LawBook">
+        select * from law_book where id = #{id}
+    </select>
+    <select id="list" resultType="org.lawcommoncore.entity.LawBook">
+        select * from law_book
+    </select>
+    <select id="queryByPage" resultType="org.lawcommoncore.entity.LawBook">
+        select * from law_book
+        <where>
+            <if test="name != null and name !=''">
+                and name like concat('%',#{name},'%')
+            </if>
+        </where>
+    </select>
+
+    <insert id="insert" parameterType="org.lawcommoncore.entity.LawBook">
+        insert into law_book
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="name != null">name,</if>
+            <if test="publishDate != null">publish_date,</if>
+            <if test="effectiveDate != null">effective_date,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="name != null">#{name},</if>
+            <if test="publishDate != null">#{publishDate},</if>
+            <if test="effectiveDate != null">#{effectiveDate},</if>
+        </trim>
+    </insert>
+
+    <update id="update" parameterType="org.lawcommoncore.entity.LawBook">
+        update law_book
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="publishDate != null">publish_date = #{publishDate},</if>
+            <if test="effectiveDate != null">effective_date = #{effectiveDate},</if>
+            update_time = NOW()
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="delete" parameterType="java.lang.Long">
+        delete from law_book where id in
+        <foreach collection="ids" item="id" open="(" close=")" separator="," >
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

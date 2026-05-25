@@ -26,6 +26,12 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
      */
     @Override
     public boolean preHandle(HttpServletRequest  request, HttpServletResponse response, Object handler) throws  Exception {
+        // 内部服务调用，直接放行
+        String internalCall = request.getHeader("X-Internal-Call");
+        if ("true".equals(internalCall)) {
+            return true;
+        }
+
         String token = request.getHeader(jwtProperties.getAdminTokenName());
         try{
             log.info("检验令牌");

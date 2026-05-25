@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawlawservice.mapper.LawCaseMapper">
+
+
+    <insert id="insert" parameterType="org.lawcommoncore.entity.LawCase" useGeneratedKeys="true" keyProperty="id">
+         insert into law_case ( title, type_id, tags, content, cover, judgment ,publish_time, status, create_time, update_time)
+         values ( #{title}, #{typeId}, #{tags}, #{content}, #{cover}, #{judgment},#{publishTime}, #{status}, #{createTime}, #{updateTime})
+    </insert>
+    <update id="update" parameterType="org.lawcommoncore.entity.LawCase">
+        update law_case
+        <set>
+            <if test="title != null and title !=''">
+                title = #{title},
+            </if>
+            <if test="typeId != null">
+                type_id = #{typeId},
+            </if>
+            <if test="tags != null and tags !=''">
+                tags = #{tags},
+            </if>
+            <if test="content != null and content !=''">
+                content = #{content},
+            </if>
+            <if test="cover != null and cover !=''">
+                cover = #{cover},
+            </if>
+            <if test="status != null">
+                status = #{status},
+            </if>
+            <if test="judgment != null and judgment !=''">
+                judgment = #{judgment},
+            </if>
+
+        </set>where id = #{id}
+    </update>
+    <update id="batchToggleStatus" parameterType="org.lawcommoncore.dto.LawCaseStatusDTO">
+        update law_case
+        <set>
+            status = #{status}
+        </set>
+        where id in
+        <foreach item="item" collection="ids" separator="," close=")" open="(" index="index">
+             #{item}
+        </foreach>
+    </update>
+    <delete id="delete" parameterType="java.lang.Long">
+        delete from law_case where id = #{id}
+    </delete>
+    <select id="queryByPage" resultType="org.lawcommoncore.vo.LawCaseVO" parameterType="org.lawcommoncore.dto.LawCasePageDTO">
+        select lc.*,lt.name as type_name from law_case lc left join law_type lt on lc.type_id = lt.id
+        <where>
+            <if test="title != null and title!=''">
+                and title like concat('%',#{title},'%')
+            </if>
+            <if test="typeId != null ">
+                and type_id = #{typeId}
+            </if>
+            <if test="tags != null and tags!=''">
+                and tags like concat('%',#{tags},'%')
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+        </where>order by lc.publish_time desc
+    </select>
+
+    <select id="get" resultType="org.lawcommoncore.entity.LawCase" parameterType="java.lang.Long">
+        select * from law_case where id = #{id}
+    </select>
+
+    <select id="searchCaseByKeyword" resultType="org.lawcommoncore.vo.SearchResultVO">
+        select
+            id,
+            title,
+            content,
+            'case' as type,
+            create_time as createTime
+        from law_case
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (title like concat('%', #{keyword}, '%') or content like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+    <select id="all" resultType="org.lawcommoncore.entity.LawCase">
+        select * from law_case
+    </select>
+    <select id="getCard" resultType="org.lawcommoncore.vo.LawCaseVO">
+        select lc.*,lt.name as type_name from law_case lc left join law_type lt on lc.type_id = lt.id where lc.id=#{id}
+    </select>
+</mapper>

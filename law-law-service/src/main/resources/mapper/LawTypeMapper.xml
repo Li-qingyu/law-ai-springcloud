@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawlawservice.mapper.LawTypeMapper">
+<!-- 添加法律类型 -->
+    <insert id="insert">
+        insert into law_type(name,description) values(#{name},#{description})
+    </insert>
+<!-- 更新法律类型 -->
+    <update id="update">
+        update law_type
+        <set>
+            <if test="name != null and name!='' ">
+                name = #{name},
+            </if>
+            <if test="description != null and description!='' ">
+                description = #{description},
+            </if>
+        </set>
+          where id = #{id}
+    </update>
+<!-- 删除法律类型 -->
+    <delete id="delete">
+            delete from law_type where id = #{id}
+    </delete>
+
+    <select id="get" resultType="org.lawcommoncore.entity.LawType" parameterType="java.lang.Long">
+        select * from law_type where id = #{id,jdbcType=BIGINT}
+    </select>
+    <select id="list" resultType="org.lawcommoncore.vo.LawTypeListVO">
+        select id,name, description,update_time from law_type
+        <where>
+            <if test="name != null and name!='' ">
+                and name like concat('%',#{name},'%')
+            </if>
+        </where> order by update_time desc
+    </select>
+    <select id="all" resultType="org.lawcommoncore.entity.LawType">
+        select id,name, description,update_time from law_type
+    </select>
+</mapper>

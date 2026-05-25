@@ -31,7 +31,7 @@ spring:
             - id: law-service
               uri: lb://law-law-service
               predicates:
-                - Path=/law/**, /admin/law/**
+                - Path=/admin/types/**,/admin/law-books/**,/admin/law-articles/**,/user/collection/**,/admin/case/**,/user/case/**
               filters:
                 - StripPrefix=0
 

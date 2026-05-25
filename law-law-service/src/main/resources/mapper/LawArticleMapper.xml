@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawlawservice.mapper.LawArticleMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into law_article(book_id,article_title,content,publish_date,effective_date,create_time,update_time,article_order)
+        values(#{lawBookId},#{articleTitle},#{content},#{publishDate},#{effectiveDate},#{createTime},#{updateTime},#{articleOrder})
+    </insert>
+    <update id="update" parameterType="org.lawcommoncore.entity.LawArticle">
+         update law_article
+         <set>
+             <if test="lawBookId != null">
+                 book_id = #{lawBookId},
+             </if>
+             <if test="articleTitle != null and articleTitle !=''">
+                  article_title = #{articleTitle},
+             </if>
+              <if test="content != null and content !=''">
+                  content = #{content},
+             </if>
+             <if test="publishDate != null">
+                  publish_date = #{publishDate},
+             </if>
+              <if test="effectiveDate != null">
+                  effective_date = #{effectiveDate},
+             </if>
+             <if test="updateTime != null">
+                  update_time = #{updateTime},
+             </if>
+         </set> where id = #{id}
+
+    </update>
+    <delete id="delete" parameterType="java.util.List">
+        delete from law_article where id in
+        <foreach item="item" collection="ids" separator="," open="(" close=")">
+            #{item}
+        </foreach>
+
+    </delete>
+    <select id="list" resultType="org.lawcommoncore.entity.LawArticle">
+        select la.*,la.book_id as lawBookId,lb.name as book_title from law_article la left join law_book lb on la.book_id = lb.id
+        <where>
+            <if test="lawBookId != null ">
+                and la.book_id = #{lawBookId}
+            </if>
+            <if test="articleTitle != null and articleTitle!=''">
+                and article_title like concat('%',#{articleTitle},'%')
+            </if>
+        </where>order by lb.name asc,  la.article_order asc
+    </select>
+    <select id="get" resultType="org.lawcommoncore.entity.LawArticle" parameterType="java.lang.Long">
+        select la.*,la.book_id as lawBookId,lb.name as book_title from law_article la left join law_book lb on la.book_id = lb.id where la.id =#{id}
+    </select>
+    <select id="queryByBookIdCount" resultType="java.lang.Integer">
+        select count(1) from law_article where book_id = #{bookId} order by article_order
+    </select>
+
+    <select id="searchArticleByKeyword" resultType="org.lawcommoncore.vo.SearchResultVO">
+        select
+            id,
+            article_title as title,
+            content,
+            'code' as type,
+            create_time as createTime
+        from law_article
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (article_title like concat('%', #{keyword}, '%') or content like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+
+    <select id="queryByBook" resultType="org.lawcommoncore.entity.LawArticle" parameterType="java.lang.Integer">
+        select id,book_id as lawBookId,article_title,content,publish_date,effective_date,create_time,update_time,article_order from law_article where book_id = #{bookId} order by article_order
+    </select>
+</mapper>
