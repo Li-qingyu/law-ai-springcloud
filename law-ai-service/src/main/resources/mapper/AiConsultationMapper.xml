@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawaiservice.mapper.AiConsultationMapper">
+    <delete id="delete">
+         delete from ai_consultation where session_id = #{sessionId}
+    </delete>
+
+    <select id="searchConsultationByKeyword" resultType="org.lawcommoncore.vo.SearchResultVO">
+        select
+            id,
+            question as title,
+            answer as content,
+            'consult' as type,
+            create_time as createTime
+        from ai_consultation
+        <where>
+            <if test="keyword != null and keyword != ''">
+                and (question like concat('%', #{keyword}, '%') or answer like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+
+    <select id="selectBySessionId" resultType="org.lawcommoncore.entity.AiConsultation">
+        select
+            id,
+            session_id as sessionId,
+            turn_number as turnNumber,
+            user_id as userId,
+            question,
+            answer,
+            create_time as createTime
+        from ai_consultation
+        where session_id = #{sessionId}
+        order by turn_number asc
+    </select>
+    <select id="get" resultType="org.lawcommoncore.entity.AiConsultation">
+        select
+            id,
+            session_id as sessionId,
+            turn_number as turnNumber,
+            user_id as userId,
+            question,
+            answer,
+            create_time as createTime
+        from ai_consultation
+        where id = #{id}
+    </select>
+    <select id="getAllSession" resultType="org.lawcommoncore.vo.AiSessionHistoryVO">
+
+        select
+            id,
+            session_id as sessionId,
+            question as title,
+            answer as content,
+            create_time as createTime
+        from ai_consultation
+        where turn_number = 1 and user_id=#{userId}
+        order by create_time desc
+    </select>
+    <select id="chatDetail" resultType="org.lawcommoncore.vo.AiConsultationDetailVO">
+        select
+            id,
+            session_id as sessionId,
+            turn_number as turnNumber,
+            user_id as userId,
+            question,
+            answer,
+            data_cards as dataCardsJson,
+            create_time as createTime
+        from ai_consultation
+        where session_id = #{sessionId}
+        order by turn_number
+    </select>
+
+    <insert id="insert" parameterType="org.lawcommoncore.entity.AiConsultation" useGeneratedKeys="true" keyProperty="id">
+        insert into ai_consultation (session_id, turn_number, user_id, question, answer, data_cards, create_time)
+        values (#{sessionId}, #{turnNumber}, #{userId}, #{question}, #{answer}, #{dataCards}, #{createTime})
+    </insert>
+
+</mapper>

@@ -6,6 +6,7 @@ import org.lawcommoncore.dto.LawCasePageDTO;
 import org.lawcommoncore.dto.LawCaseStatusDTO;
 import org.lawcommoncore.entity.LawCase;
 import org.lawcommoncore.result.PageResult;
+import org.lawcommoncore.vo.LawCaseVO;
 
 public interface LawCaseService {
     void save(LawCaseDTO lawCaseDTO);
@@ -25,4 +26,6 @@ public interface LawCaseService {
     Integer countOneWeekAgo();
 
     String addLawCaseToMilvusAsync();
+
+    LawCaseVO getCard(Long id, Integer typeId);
 }

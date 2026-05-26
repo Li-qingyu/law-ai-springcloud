@@ -39,7 +39,7 @@ spring:
             - id: ai-service
               uri: lb://law-ai-service
               predicates:
-                - Path=/ai/**
+                - Path=/user/ai/**
               filters:
                 - StripPrefix=0
 

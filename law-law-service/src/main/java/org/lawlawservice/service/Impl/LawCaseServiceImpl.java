@@ -166,5 +166,9 @@ public class LawCaseServiceImpl implements LawCaseService {
 
     }
 
+    @Override
+    public LawCaseVO getCard(Long id, Integer typeId) {
+        return lawCaseMapper.getCard(id, typeId);
+    }
 
 }
