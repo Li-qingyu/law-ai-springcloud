@@ -22,5 +22,7 @@ public interface LawCaseService {
 
     Integer count();
 
+    Integer countOneWeekAgo();
+
     String addLawCaseToMilvusAsync();
 }

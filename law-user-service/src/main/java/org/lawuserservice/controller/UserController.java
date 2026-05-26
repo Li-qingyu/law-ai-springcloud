@@ -148,6 +148,12 @@ public class UserController {
         Integer count = userService.count();
         return Result.success(count);
     }
+    @GetMapping("/admin/users/countOneWeekAgo")
+    public Result<Integer> countOneWeekAgo() {
+        log.info("统计一周前用户数");
+        Integer count = userService.countOneWeekAgo();
+        return Result.success(count);
+    }
 
 
 }

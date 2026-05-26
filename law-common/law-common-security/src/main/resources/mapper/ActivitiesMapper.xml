@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawcommonsecurity.mapper.ActivitiesMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO activities (user_id, type, title, create_time)
+        VALUES (#{userId}, #{type}, #{title}, #{time})
+    </insert>
+    <delete id="delete" parameterType="org.lawcommoncore.entity.DeleteInfo">
+        DELETE FROM activities
+        <where>
+            <if test="time != null">
+                create_time &lt; #{time}
+            </if>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+        </where>
+    </delete>
+
+    <select id="queryRecentActivities" resultType="org.lawcommoncore.vo.ActivitiesVO">
+        SELECT
+            a.id,
+            a.type,
+            a.title,
+            u.username AS userName,
+            a.create_time AS time
+        FROM activities a
+                 LEFT JOIN user u ON a.user_id = u.id
+        ORDER BY a.create_time DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

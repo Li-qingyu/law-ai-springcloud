@@ -16,4 +16,9 @@ spring:
       discovery:
         group: DEFAULT_GROUP
 
+mybatis:
+  mapper-locations: classpath*:mapper/*.xml
+  type-aliases-package: org.lawcommoncore.entity
+  configuration:
+    map-underscore-to-camel-case: true
 

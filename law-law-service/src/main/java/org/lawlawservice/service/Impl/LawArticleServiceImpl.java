@@ -246,6 +246,11 @@ public class LawArticleServiceImpl implements LawArticleService {
     }
 
     @Override
+    public Integer countOneWeekAgo() {
+        return lawArticleMapper.countOneWeekAgo();
+    }
+
+    @Override
     public String addLawArticlesToMilvusAsync(Integer lawBookId) {
         // 1. 生成唯一任务ID
         String taskId = UUID.randomUUID().toString();

@@ -73,4 +73,9 @@ public class LawTypeServiceImpl implements LawTypeService {
     public Integer count() {
         return lawTypeMapper.count();
     }
+
+    @Override
+    public Integer countOneWeekAgo() {
+        return lawTypeMapper.countOneWeekAgo();
+    }
 }

@@ -26,6 +26,7 @@ public  interface UserService {
 
     Integer count();
 
+    Integer countOneWeekAgo();
 
     void resetPassword(ForgetFormDTO forgetFormDTO);
 }

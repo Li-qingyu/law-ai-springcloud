@@ -82,4 +82,9 @@ public class LawTypeController {
         log.info("统计法律类型条数");
         return Result.success(lawTypeService.count());
     }
+    @GetMapping("/countOneWeekAgo")
+    public Result<Integer> countOneWeekAgo() {
+        log.info("统计一周前法律类型条数");
+        return Result.success(lawTypeService.countOneWeekAgo());
+    }
 }

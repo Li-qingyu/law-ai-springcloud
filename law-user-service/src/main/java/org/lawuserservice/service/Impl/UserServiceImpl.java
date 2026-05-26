@@ -142,6 +142,11 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    public Integer countOneWeekAgo() {
+        return userMapper.countOneWeekAgo();
+    }
+
+    @Override
     public void resetPassword(ForgetFormDTO forgetFormDTO) {
         //检查用户名和邮箱是否正确
         User user = userMapper.selectByUsername(forgetFormDTO.getUsername());

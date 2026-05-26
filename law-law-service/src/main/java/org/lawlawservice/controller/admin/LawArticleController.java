@@ -86,6 +86,11 @@ public class LawArticleController {
         log.info("查询所有法条");
         return Result.success(lawArticleService.count());
     }
+    @GetMapping("/countOneWeekAgo")
+    public Result<Integer> countOneWeekAgo() {
+        log.info("查询一周前法条数量");
+        return Result.success(lawArticleService.countOneWeekAgo());
+    }
     /**
      * 异步批量导入法条到milvus
      */

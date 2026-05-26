@@ -22,6 +22,8 @@ public interface LawArticleService {
     String importExcel(MultipartFile file, Integer bookId);
     Integer count();
 
+    Integer countOneWeekAgo();
+
     String addLawArticlesToMilvusAsync(Integer lawBookId);
 
 }

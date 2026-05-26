@@ -82,6 +82,11 @@ public class LawCaseController {
         log.info("查询案例数量");
         return Result.success(lawCaseService.count());
     }
+    @GetMapping("/countOneWeekAgo")
+    public Result<Integer> countOneWeekAgo(){
+        log.info("查询一周前案例数量");
+        return Result.success(lawCaseService.countOneWeekAgo());
+    }
     /**
      * 批量同步法律案例
      *

@@ -21,4 +21,6 @@ public interface LawTypeService {
     List<LawType> list();
 
     Integer count();
+
+    Integer countOneWeekAgo();
 }

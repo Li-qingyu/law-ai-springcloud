@@ -6,6 +6,8 @@ import org.lawcommoncore.dto.LawCasePageDTO;
 import org.lawcommoncore.dto.SearchDTO;
 import org.lawcommoncore.result.PageResult;
 import org.lawcommoncore.result.Result;
+import org.lawcommoncore.vo.CarouselVO;
+import org.lawlawservice.feign.CarouselFeignClient;
 import org.lawlawservice.service.LawBookService;
 import org.lawlawservice.service.LawCaseService;
 import org.lawlawservice.service.SearchService;
@@ -13,6 +15,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
 @Slf4j
 @RestController
 @RequestMapping("/user/home")
@@ -23,6 +28,16 @@ public class HomeController {
     private LawBookService lawBookService;
     @Autowired
     private SearchService searchService;
+    @Autowired
+    private CarouselFeignClient carouselFeignClient;
+
+
+
+    @GetMapping("/carousel")
+    public Result<List<CarouselVO>> carousel() {
+        return carouselFeignClient.list();
+    }
+
 
     @GetMapping("/cases")
     public Result<PageResult> cases(LawCasePageDTO lawCasePageDTO) {
@@ -49,4 +64,5 @@ public class HomeController {
             return Result.error("搜索失败，请稍后重试");
         }
     }
+
 }

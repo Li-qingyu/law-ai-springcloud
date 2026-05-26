@@ -127,6 +127,11 @@ public class LawCaseServiceImpl implements LawCaseService {
     public Integer count() {
         return lawCaseMapper.count();
     }
+
+    @Override
+    public Integer countOneWeekAgo() {
+        return lawCaseMapper.countOneWeekAgo();
+    }
     @Override
     public String addLawCaseToMilvusAsync() {
         //1。生成任务ID
