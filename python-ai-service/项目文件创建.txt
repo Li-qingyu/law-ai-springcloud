@@ -1,0 +1,45 @@
+python-ai-service/
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # FastAPI 应用入口
+│   ├── core/
+│   │   ├── __init__.py
+│   │   └── config.py        # 配置管理
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── v1/
+│   │       ├── __init__.py
+│   │       ├── ai.py        # AI 咨询路由
+│   │       └── sessions.py  # 会话管理路由
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── request.py       # 请求模型
+│   │   └── response.py      # 响应模型
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── agent_service.py     # Agent 服务
+│   │   └── session_service.py   # 会话服务
+│   ├── tools/
+│   │   ├── __init__.py
+│   │   ├── base_search_tool.py  # 工具基类
+│   │   ├── law_article_tool.py
+│   │   ├── law_case_tool.py
+│   │   └── consult_history_tool.py
+│   ├── repositories/
+│   │   ├── __init__.py
+│   │   └── milvus_client.py     # Milvus 客户端
+│   ├── builders/
+│   │   ├── __init__.py
+│   │   └── data_card_builder.py # 数据卡片构建器
+│   └── utils/
+│       ├── __init__.py
+│       └── embedding.py         # 嵌入模型
+├── tests/
+│   ├── __init__.py
+│   └── conftest.py
+├── docker/
+│   └── Dockerfile
+├── .env.example
+├── .gitignore
+├── pyproject.toml
+└── main.py
