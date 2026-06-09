@@ -14,7 +14,7 @@ public interface MilvusSyncService {
 
     public void deleteLawArticle(List<Long> ids);
     public void deleteLawCase(List<Long> ids);
-    public void deleteAiConsultation(List<Long> ids);
+    public void deleteAiConsultation(List<String> ids);
 
     public void addLawArticles(List<LawArticle> articles);
     public void addLawCases(List<LawCase> lawCases);

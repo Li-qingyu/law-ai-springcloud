@@ -92,7 +92,6 @@ public class AIConsultServiceImpl implements AIConsultService {
                         .build();
                 aiConsultationMapper.insert(consultation);
 
-                //TODO: 异步保存会话历史
                 eventPublisher.publishEvent(new AiConsultationSyncEvent(this, consultation, AiConsultationSyncEvent.SyncType.ADD));
 
                 //更新redis
@@ -108,7 +107,6 @@ public class AIConsultServiceImpl implements AIConsultService {
 
         return null;
     }
-    //TODO 添加事务提交完事件之后添加到milvus和 redis更新中
 
     // 获取会话历史
     @Override
@@ -264,6 +262,9 @@ public class AIConsultServiceImpl implements AIConsultService {
         redisTemplate.delete(SESSION_KEY_PREFIX+sessionId);
         //删除数据库的数据
         aiConsultationMapper.delete(sessionId);
+        //发布事件
+        eventPublisher.publishEvent(new AiConsultationSyncEvent(this, List.of(sessionId), AiConsultationSyncEvent.SyncType.DELETE));
+
         log.info("删除session:{}", sessionId);
     }
 

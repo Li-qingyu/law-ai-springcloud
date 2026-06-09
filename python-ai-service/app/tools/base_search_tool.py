@@ -2,6 +2,7 @@
 搜索工具基类
 提供通用的向量检索功能
 """
+import asyncio
 from abc import abstractmethod
 from typing import List, Dict, Any, Optional,Type
 from langchain.tools import BaseTool
@@ -124,8 +125,11 @@ class BaseSearchTool(BaseTool):
         return "数据"
 
     @abstractmethod
-    def _run(self, query: str) -> str:
+    def _run(self, query: str) -> Any:
         pass
-    async def _arun(self, query: str) -> str:
-        """异步执行（暂不支持，同步执行）"""
-        return self._run(query)
+
+    async def _arun(self, query: str) -> Any:
+        """异步执行：通过 run_in_executor 将阻塞的 Milvus 搜索放入线程池，
+        使 AgentExecutor 的 asyncio.gather 能并发调用多个工具。"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._run, query)

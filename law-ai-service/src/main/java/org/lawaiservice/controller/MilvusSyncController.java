@@ -66,8 +66,8 @@ public class MilvusSyncController {
     }
 
     @DeleteMapping("/consult-history")
-    public Result deleteConsultHistory(@RequestBody List<Long> ids) {
-        milvusSyncService.deleteAiConsultation(ids);
+    public Result deleteConsultHistory(@RequestBody List<String> sessionIds) {
+        milvusSyncService.deleteAiConsultation(sessionIds);
         return Result.success("删除咨询历史成功");
     }
 }

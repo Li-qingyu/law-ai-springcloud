@@ -1,43 +1,80 @@
 import json
 import logging
+import re
 import time
 from typing import List, Tuple, AsyncGenerator, Generator
 from dateutil import parser
-from langchain_classic.agents import AgentExecutor, create_react_agent
+from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from app.builders.data_card_builder import DataCardBuilder
 from app.core.config import get_settings, Settings
+
+# ==================== Monkey-patch ChatTongyi streaming bug ====================
+# langchain_community ChatTongyi 的 subtract_client_response 在流式 tool_calls 场景下
+# 当前 chunk 的 tool_calls 数量 > 上一个 chunk 时，index 越界导致 IndexError。
+# 上游 issue: https://github.com/langchain-ai/langchain/issues/28076
+from langchain_community.chat_models.tongyi import ChatTongyi as _ChatTongyi
+
+
+def _patched_subtract_client_response(self, resp, prev_resp):
+    """修复版：处理 tool_calls 数量在流式过程中递增的情况"""
+    resp_copy = json.loads(json.dumps(resp))
+    choice = resp_copy["output"]["choices"][0]
+    message = choice["message"]
+
+    prev_resp_copy = json.loads(json.dumps(prev_resp))
+    prev_choice = prev_resp_copy["output"]["choices"][0]
+    prev_message = prev_choice["message"]
+
+    message["content"] = message["content"].replace(prev_message["content"], "")
+
+    if message.get("tool_calls"):
+        prev_tool_calls = prev_message.get("tool_calls", [])
+        for index, tool_call in enumerate(message["tool_calls"]):
+            function = tool_call["function"]
+            if index < len(prev_tool_calls):
+                prev_function = prev_tool_calls[index]["function"]
+                if "name" in function:
+                    function["name"] = function["name"].replace(
+                        prev_function["name"], ""
+                    )
+                if "arguments" in function:
+                    function["arguments"] = function["arguments"].replace(
+                        prev_function["arguments"], ""
+                    )
+
+    return resp_copy
+
+
+_ChatTongyi.subtract_client_response = _patched_subtract_client_response
 from app.models.request import AiConsultRequest, ConversationHistoryMessage
 from app.models.response import AiConsultResponse
 from app.repositories.milvus_client import init_milvus
+from app.services.parallel_search import parallel_search_all_sync, build_tool_context_from_results
+from app.services.semantic_cache import SemanticCache
 from app.tools import create_search_tools
 from app.builders import data_card_builder
 from langchain_community.chat_models import ChatTongyi
 
-REACT_SYSTEM_PROMPT = """你是一位专业、严谨的法律信息助理，名为"小鱼律智助手"。你的职责是帮助用户理解法律概念、查询相关法律条文或典型案例，并基于提供的法律检索工具返回的结果，给出准确、有依据的回答。
+# ==================== 两阶段分离架构 ====================
+# 阶段 1: pre_analyze() — 轻量预分析（代词消解 + 意图分类），~0.5-1s
+# 阶段 2: Agent 推理 — 不注入对话历史，token 消耗降低 40%+
+# 阶段 3: 流式生成 — 注入对话历史 + 工具结果，生成最终回答
 
-## 可用工具
-
-{tools}
-
-使用以下格式进行思考和行动：
-
-Question: 必须回答的输入问题
-Thought: 你应该总是思考该做什么
-Action: 要采取的行动，应该是 [{tool_names}] 之一
-Action Input: 行动的输入参数
-Observation: 行动的结果
-...（这个 Thought/Action/Action Input/Observation 可以重复 N 次）
-Thought: 我现在知道最终答案了
-Final Answer: 对原始输入问题的最终答案
+"""
+    常量
+"""
+# 提示词 — OpenAI Tools Agent 格式（支持并行工具调用）
+AGENT_SYSTEM_PROMPT = """你是一位专业、严谨的法律信息助理，名为"小鱼律智助手"。你的职责是帮助用户理解法律概念、查询相关法律条文或典型案例，并基于提供的法律检索工具返回的结果，给出准确、有依据的回答。
 
 ## 核心工作流程
 
 1. **理解用户意图**：分析用户问题中的法律领域（如合同、劳动、婚姻、侵权等）、关键事实和具体诉求。
+   - 注意：当前问题已经过预分析处理，代词已替换为具体实体，可直接用于检索。
 
-2. **调用查询工具**：当需要获取法律条文、司法解释、典型案例或历史咨询时，**必须使用可用的工具**。
+2. **调用查询工具**：当需要获取法律条文、司法解释、典型案例或历史咨询时，**必须使用可用的工具**。可以同时调用多个工具并行检索。
 
    **重要原则 - 关键词转化策略**：
    - ⚠️ **严禁直接使用用户口语化问题进行检索！**
@@ -46,32 +83,32 @@ Final Answer: 对原始输入问题的最终答案
      * 提取核心法律关系（如：租赁合同解除、押金返还、违约责任）
      * 使用标准法律术语（如："买卖不破租赁"而非"卖房不影响租房"）
      * 明确争议焦点（如："承租人保管义务"而非"卫生打扫干净"）
-   
+
    **转化示例**：
-     * 用户问："房东卖房要我搬走合法吗？" 
+     * 用户问："房东卖房要我搬走合法吗？"
        → 检索词："买卖不破租赁 租赁合同存续期间所有权变动"
-     * 用户问："扣我押金说卫生不干净" 
+     * 用户问："扣我押金说卫生不干净"
        → 检索词："租赁合同押金返还 承租人保管义务 正常使用损耗"
-     * 用户问："公司辞退我要赔钱吗？" 
+     * 用户问："公司辞退我要赔钱吗？"
        → 检索词："违法解除劳动合同 经济补偿金 赔偿金计算标准"
-     * 用户问："借钱不还怎么办？" 
+     * 用户问："借钱不还怎么办？"
        → 检索词："民间借贷合同纠纷 违约责任 诉讼时效中断"
 
 3. **整合工具返回结果**：工具会返回格式化的法律信息（包含ID、相关度评分、内容摘要等）。你必须**严格基于工具返回的真实内容**进行回答，不得编造或补充工具未提供的信息。
 
    **重要理解原则**：
    - ✅ **工具返回任何结果都是"有效信息"**，即使结果与用户期望不符
-   - ✅ 如果返回的案例/法条不支持用户立场，应**如实说明司法实践的倾向性**
-   - ❌ **严禁说"未找到相关信息"**，除非工具确实返回空结果
+   - ✅ 如果返回的案例/法条不支持用户立场，应*如实说明司法实践的倾向性*
+   - ❌ **禁止说"未找到相关信息"**，除非工具确实返回空结果
    - ✅ 正确做法："根据检索结果，目前公开案例显示……虽然与您期望的方向不同，但反映了当前司法实践的主流观点"
 
-4. **回答用户**：用清晰、易懂的语言组织答案，注明所依据的法条或出处。**如果工具返回的结果与用户期望不一致，应客观说明司法实践现状，而非声称"未找到"如果用户想要咨询你案例的问题你要最后生基于你所的得到的消息进行一个整合后给出解决方案一定不能杜撰**。
+4. **回答用户**：用清晰、易懂的语言组织答案，注明所依据的法条或出处。*如果工具返回的结果与用户期望不一致，应客观说明司法实践现状，而非声称"未找到"。如果用户想要咨询你案例的问题你要最后生基于你所的得到的消息进行一个整合后给出解决方案一定不能杜撰*。
 
 ## 上下文处理规则
 
-- **记住对话历史**：用户可能在多轮对话中补充事实或修正问题。你需要结合之前的提问与回答，理解当前问题的完整背景。
-- **消除指代歧义**：若用户使用"它""那件事""这个条款"等代词，请根据对话历史明确其指代对象。如有疑问，主动向用户确认。
-- **保持事实一致性**：同一对话中，对同一法律问题的解释不得前后矛盾。如果用户质疑之前的回答，请核实工具结果并诚恳修正。
+- 当提供了对话历史时，结合历史理解当前问题的完整背景，特别是代词（"它"、"那个"、"这个"）的指代对象。
+- 当未提供对话历史时，直接基于问题内容进行检索和回答。
+- 保持事实一致性：回答应基于工具返回的真实内容，不编造信息。
 
 ## 回答规范
 
@@ -83,7 +120,7 @@ Final Answer: 对原始输入问题的最终答案
 
   对于简单查询，可适当简化。
 
-- **引用来源**：每次引用法律内容后，用括号注明来源，例如：`（《中华人民共和国劳动合同法》第46条）`。
+- **引用来源**：每次引用法律内容后，用括号注明来源，例如：`（《中华人民共和国劳动合同法》第46条）`
 
 - **不确定时的处理**：如果工具返回的结果相互冲突、不完整或超出你的知识范围，请明确说明："根据现有资料，无法确定……建议您查阅权威法律文本或咨询专业律师。"
 
@@ -94,10 +131,9 @@ Final Answer: 对原始输入问题的最终答案
 - **优先使用法律条文工具**：当用户询问法律规定、法条解释时
 - **结合案例工具**：当需要了解司法实践、判例参考时
 - **参考历史咨询**：当问题具有普遍性、可能有类似问答时
-- **多工具协同**：复杂问题可同时调用多个工具，综合回答
-- **限制调用次数**：每个问题最多调用同一个工具1次，避免过度检索，不同工具可以调用。
+- **多工具协同**：复杂问题应同时调用多个工具并行检索，综合回答
+- **限制调用次数**：每个问题最多调用同一个工具2次，避免过度检索，不同工具可以调用
 - **智能判断是否需要工具**：如果用户问题是简单的法律概念解释或基于之前已获取的信息进行追问，可以直接回答，无需重复调用工具
-
 
 ## 重要原则
 
@@ -105,149 +141,57 @@ Final Answer: 对原始输入问题的最终答案
 2. **基于证据**：所有回答必须有工具返回的内容作为支撑
 3. **用户友好**：将专业法律术语转化为用户能理解的语言
 4. **合规免责**：始终强调本回答不构成正式法律意见
-5. **不回答超出法律范围的问题** ：如果用户向你询问与法律无关的问题要回复暂时无法回复
+5. **不回答超出法律范围的问题**：如果用户向你询问与法律无关的问题要回答暂时无法回答
 6. **效率优先**：快速定位核心法律问题，避免冗余的工具调用
-
-Begin!
-
-{input}
-
-{agent_scratchpad}
 """
 
-RENEW_PROMPT = ChatPromptTemplate.from_messages([
-    ("system",
-     "你是一个问题重写助手。你的任务是根据对话历史，将用户的最新问题改写为一个独立、完整、适合法律检索的查询语句。"),
-    MessagesPlaceholder(variable_name="chat_history"),
-    ("human",
-     "基于以上对话历史，将用户最新的问题重写为一个独立的、适合法律检索的完整问题。如果问题已经完整，则原样返回。只返回重写后的问题，不要有其他解释。\n\n最新问题: {input}"),
-])
+# 开头招呼语言
+GREETINGS="""
+你好！我是小鱼律智助手，专注于为你提供准确、有依据的法律信息支持。  
+你可以随时提出关于合同、劳动、婚姻家事、房产、侵权、公司、知识产权等领域的法律问题，例如：  
+- “租房到期后房东不退押金怎么办？”  
+- “公司没签劳动合同，能要双倍工资吗？”  
+- “交通事故对方全责，赔偿项目有哪些？”  
 
+请描述你的具体情况或疑问，我会基于现行法律法规和司法实践，为你检索并解读相关条文或案例。
+"""
 
-def get_new_question(request: AiConsultRequest) -> Tuple[str, list]:
-    question = request.question
-    logging.info(f"获取问题: {question}")
-    history_data = []
-    conversation_history = request.conversation_history or []
-    for message in conversation_history:
-        if message.role == "user":
-            history_data.append(HumanMessage(content=message.content))
-        elif message.role == "assistant":
-            history_data.append(AIMessage(content=message.content))
-    settings = get_settings()
-    llm = ChatTongyi(
-        api_key=settings.DASHSCOPE_API_KEY,
-        model=settings.OPENAI_MODEL,
-        top_p=0.7,
-        streaming=False,
-    )
-    rewrite_chain = RENEW_PROMPT | llm
-    rewrite_question = rewrite_chain.invoke({"chat_history": history_data, "input": question})
-    logging.info(f"问题重写: {rewrite_question}")
-    return rewrite_question.content, history_data
+# 预分析模块提示词
+PRE_ANALYZE_PROMPT = """你是一个法律咨询助手的预分析模块。请完成两个任务：
 
+1. **代词消解**：如果当前问题包含代词（"它"、"那个"、"这个"、"他"、"她"等），根据对话上下文将其替换为具体实体
+2. **意图分类**：判断用户意图类别
 
-def deduplicate_cards(cards: list) -> list:
-    """
-    对数据卡片去重（基于 type + id）
-    """
-    seen = set()
-    unique_cards = []
-    for card in cards:
-        card_key = (card.type, card.id)
-        if card_key not in seen:
-            seen.add(card_key)
-            unique_cards.append(card)
+对话上下文：
+{context}
 
-    return unique_cards
+当前问题：{question}
 
-def create_data_card(steps: list)->list:
-    if len(steps) <= 0:
-        return []
-    all_card=[]
-    tool_to_card_type = {
-        "search_law_articles": "law_articles",
-        "search_law_cases": "law_cases",
-        "search_consult_history": "consult_history"
-    }
-    for step in steps:
-        if len(step)<2:
-            continue
-        agent_action=step[0]
-        data_sources=step[1]
+输出 JSON（不要输出其他内容）：
+{{"resolved_question": "替换代词后的完整问题（如无需替换则原样输出）", "intent": "simple_query/consultation/follow_up/chitchat"}}
 
-        tool_type=agent_action.tool
-        card_type = tool_to_card_type.get(tool_type)
-        if not card_type:
-            continue
-        data_card = DataCardBuilder.from_milvus_result(data_sources, card_type)
-        all_card.extend(data_card)
-    deduplicated_cards = deduplicate_cards(all_card)
-    sorted_cards = sorted(deduplicated_cards, key=lambda card: card.relevance, reverse=True)
-
-    return sorted_cards[:10]
-
-
-
-def consult(request: AiConsultRequest):
-    import time
-    start_time=time.time()
-
-    new_result = get_new_question(request)
-    new_question = new_result[0]
-    history_data = new_result[1]
-    tools = create_search_tools()
-    logging.info(f"已经加载搜索工具: {len(tools)}个")
-    print(f"已经加载搜索工具: {len(tools)}个")
-
-    settings = get_settings()
-    llm = ChatTongyi(
-        api_key=settings.DASHSCOPE_API_KEY,
-        model=settings.OPENAI_MODEL,
-        top_p=0.7,
-        streaming=False,
-    )
-
-
-    # 使用 PromptTemplate 并显式声明所有必需变量
-    agent_prompt = PromptTemplate(
-        template=REACT_SYSTEM_PROMPT,
-        input_variables=["input", "tools", "tool_names", "agent_scratchpad"]
-    )
-
-    agent = create_react_agent(llm, tools, agent_prompt)
-    agent_executor = AgentExecutor(
-        agent=agent,
-        tools=tools,
-        max_iterations=settings.AGENT_MAX_ITERATIONS,
-        handle_parsing_errors=True,
-        verbose=True,
-        return_intermediate_steps=True,
-    )
-    try:
-        result = agent_executor.invoke({"input": new_question})
-    except Exception as e:
-        logging.error(f"Agent执行失败: {type(e).__name__}: {e}")
-        raise
-    end_time = time.time()
-    processing_time_ms = int((end_time - start_time) * 1000)
-    ai_answer = result.get("output", "抱歉，我暂时无法回答您的问题。")
-    steps = result.get("intermediate_steps", [])
-
-    data=create_data_card(steps)
-
-    return AiConsultResponse(
-        answer=ai_answer,
-        data_cards=data,
-        session_id=request.session_id,
-        user_id=request.user_id,
-        turn_number= len(history_data)//2+1,
-        processing_time_ms=processing_time_ms,
-    )
-
+分类标准：
+- simple_query：查询具体法条、法律定义、简单事实查询
+- consultation：需要分析的法律问题、维权建议、案例咨询
+- follow_up：基于之前对话的追问（如"那赔偿怎么算"、"还有什么要注意的"）
+- chitchat：闲聊、问候、与法律无关的问题"""
+# ==================== 意图分类规则 ====================
+CHITCHAT_PATTERNS = [
+    r"^(你好|您好|嗨|hi|hello|hey|谢谢|感谢|再见|拜拜|辛苦)",
+    r".*(天气|笑话|新闻|游戏|音乐|电影).*",
+    r"^(你是谁|你叫什么|你能做什么|你是什么)",
+]
+SIMPLE_QUERY_PATTERNS = [
+    r".*第\s*\d+\s*条.*",
+    r".*(法条|法律|法规|规定|条款)\s*(是|怎么|如何)\s*(什么|说|规定).*",
+    r".*是什么(意思|含义).*",
+]
 
 # 流式生成最终答案的 prompt
 STREAM_ANSWER_PROMPT = """你是一位专业、严谨的法律信息助理。请根据以下工具检索到的法律信息，为用户生成一个高质量的回答。
+
+## 对话历史
+{chat_history}
 
 ## 工具检索结果
 {tool_context}
@@ -263,6 +207,328 @@ STREAM_ANSWER_PROMPT = """你是一位专业、严谨的法律信息助理。请
 
 请直接给出回答，不要重复问题本身。"""
 
+
+def build_chat_history_text(conversation_history: list) -> str:
+    """将对话历史格式化为可读文本，用于流式生成阶段注入"""
+    if not conversation_history:
+        return "无对话历史"
+    
+    history_lines = []
+    for msg in conversation_history:
+        role = "用户" if msg.role == "user" else "助手"
+        # 截断过长的回答，避免 token 浪费
+        content = msg.content[:500] + "..." if len(msg.content) > 500 else msg.content
+        history_lines.append(f"{role}：{content}")
+    
+    return "\n".join(history_lines)
+
+
+
+
+
+def _rule_classify(question: str, has_history: bool) -> str | None:
+    """规则快速分类，返回 None 表示需要 LLM 兜底"""
+    q = question.strip()
+
+    # 闲聊检测
+    for pattern in CHITCHAT_PATTERNS:
+        if re.match(pattern, q, re.IGNORECASE):
+            return "chitchat"
+
+    # 简单查询检测
+    for pattern in SIMPLE_QUERY_PATTERNS:
+        if re.match(pattern, q):
+            return "simple_query"
+
+    # 追问检测：有历史 + 短问题
+    if has_history and len(q) < 30:
+        return "follow_up"
+
+    return None
+
+
+def _build_minimal_context(conversation_history: list) -> str:
+    """构建最简上下文（仅保留最近 2 轮的关键信息，用于 pre_analyze）"""
+    if not conversation_history:
+        return "无"
+
+    lines = []
+    # 取最近 4 条消息（2 轮）
+    recent = conversation_history[-4:]
+    for msg in recent:
+        role = "用户" if msg.role == "user" else "助手"
+        # 只取前 150 字
+        content = msg.content[:150] + "..." if len(msg.content) > 150 else msg.content
+        lines.append(f"{role}：{content}")
+    return "\n".join(lines)
+
+
+
+
+def pre_analyze(question: str, conversation_history: list) -> dict:
+    """
+    轻量预分析：代词消解 + 意图分类
+    - 无历史时：纯规则分类，不调用 LLM（< 10ms）
+    - 有历史时：规则优先，LLM 兜底（0.5-1s）
+    """
+    has_history = bool(conversation_history)
+
+    # 1. 规则快速分类
+    intent = _rule_classify(question, has_history)
+
+    # 2. 无历史且规则命中 → 直接返回
+    if intent and not has_history:
+        logging.info(f"[pre_analyze] 规则分类: intent={intent}, question={question[:50]}")
+        return {"resolved_question": question, "intent": intent}
+
+    # 3. 有历史或规则未命中 → LLM 兜底
+    settings = get_settings()
+    llm = ChatTongyi(
+        api_key=settings.DASHSCOPE_API_KEY,
+        model=settings.OPENAI_MODEL,
+        top_p=0.7,
+        temperature=0.1,  # 低 temperature，保证输出稳定
+    )
+
+    context = _build_minimal_context(conversation_history)
+    prompt = PRE_ANALYZE_PROMPT.format(context=context, question=question)
+
+    try:
+        result = llm.invoke(prompt)
+        content = result.content.strip()
+        # 提取 JSON（处理可能的 markdown 包裹）
+        if "```" in content:
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        analysis = json.loads(content)
+        resolved = analysis.get("resolved_question", question)
+        intent = analysis.get("intent", "consultation")
+        logging.info(f"[pre_analyze] LLM分类: intent={intent}, resolved={resolved[:50]}")
+        return {"resolved_question": resolved, "intent": intent}
+    except Exception as e:
+        logging.warning(f"[pre_analyze] LLM分类失败，降级为规则结果: {e}")
+        return {
+            "resolved_question": question,
+            "intent": intent or "consultation",
+        }
+
+
+def build_history_messages(conversation_history: list) -> List:
+    """将对话历史转为 LangChain Message 列表，用于流式生成阶段"""
+    history_data = []
+    for message in conversation_history:
+        if message.role == "user":
+            history_data.append(HumanMessage(content=message.content))
+        elif message.role == "assistant":
+            history_data.append(AIMessage(content=message.content))
+    return history_data
+
+# 创建agent
+def _build_agent_executor(settings) -> AgentExecutor:
+    """
+    构建 OpenAI Tools Agent 执行器。
+    Tools Agent 支持 LLM 单步返回多个工具调用，
+    AgentExecutor._aiter_next_step 通过 asyncio.gather 并发执行。
+    """
+    tools = create_search_tools()
+    llm = ChatTongyi(
+        api_key=settings.DASHSCOPE_API_KEY,
+        model=settings.OPENAI_MODEL,
+        top_p=0.7,
+        streaming=False,
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", AGENT_SYSTEM_PROMPT),
+        MessagesPlaceholder("chat_history", optional=True),
+        ("human", "{input}"),
+        MessagesPlaceholder("agent_scratchpad"),
+    ])
+
+    agent = create_openai_tools_agent(llm, tools, prompt)
+    return AgentExecutor(
+        agent=agent,
+        tools=tools,
+        max_iterations=settings.AGENT_MAX_ITERATIONS,
+        handle_parsing_errors=True,
+        verbose=True,
+        return_intermediate_steps=True,
+    )
+
+#  去重卡片
+def deduplicate_cards(cards: list) -> list:
+    """对数据卡片去重（基于 type + id）"""
+    seen = set()
+    unique_cards = []
+    for card in cards:
+        card_key = (card.type, card.id)
+        if card_key not in seen:
+            seen.add(card_key)
+            unique_cards.append(card)
+    return unique_cards
+
+# 创建卡片
+def create_data_card(steps: list) -> list:
+    if len(steps) <= 0:
+        return []
+    all_card = []
+    tool_to_card_type = {
+        "search_law_articles": "law_articles",
+        "search_law_cases": "law_cases",
+        "search_consult_history": "consult_history"
+    }
+    for step in steps:
+        if len(step) < 2:
+            continue
+        agent_action = step[0]
+        data_sources = step[1]
+        tool_type = agent_action.tool
+        card_type = tool_to_card_type.get(tool_type)
+        if not card_type:
+            continue
+        data_card = DataCardBuilder.from_milvus_result(data_sources, card_type)
+        all_card.extend(data_card)
+    deduplicated_cards = deduplicate_cards(all_card)
+    sorted_cards = sorted(deduplicated_cards, key=lambda card: card.relevance, reverse=True)
+    return sorted_cards[:10]
+
+# 阻塞回答
+async def consult(request: AiConsultRequest):
+    """
+    非流式 AI 咨询（两阶段分离架构）。
+    阶段 0: 语义缓存检查
+    阶段 1: pre_analyze — 代词消解 + 意图分类
+    阶段 2: Agent 推理 / 简单查询快速通道
+    阶段 3: 生成最终回答
+    """
+    start_time = time.time()
+
+    question = request.question
+    conversation_history = request.conversation_history or []
+    history_data = build_history_messages(conversation_history)
+    chat_history_text = build_chat_history_text(conversation_history)
+
+    logging.info(f"原始问题: {question}")
+    logging.info(f"对话历史轮次: {len(conversation_history)}")
+
+    # 阶段 0: 语义缓存检查
+    cache = SemanticCache()
+    cached = cache.get(question)
+    if cached and not cached.get("need_refresh"):
+        logging.info(f"[缓存命中] score={cached['score']:.4f}")
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        return AiConsultResponse(
+            answer=cached["answer"],
+            data_cards=[],
+            session_id=request.session_id,
+            user_id=request.user_id,
+            turn_number=len(history_data) // 2 + 1,
+            processing_time_ms=processing_time_ms,
+        )
+
+    # 阶段 1: 轻量预分析
+    analysis = pre_analyze(question, conversation_history)
+    resolved_question = analysis["resolved_question"]
+    intent = analysis["intent"]
+    logging.info(f"[阶段1] 预分析完成: intent={intent}, resolved={resolved_question[:50]}")
+
+    # 闲聊快速返回
+    if intent == "chitchat":
+        processing_time_ms = int((time.time() - start_time) * 1000)
+        return AiConsultResponse(
+            answer="您好，我是法律咨询助手小鱼律智助手，请问有什么法律问题需要帮助？",
+            data_cards=[],
+            session_id=request.session_id,
+            user_id=request.user_id,
+            turn_number=len(history_data) // 2 + 1,
+            processing_time_ms=processing_time_ms,
+        )
+
+    settings = get_settings()
+    steps = []
+
+    if intent == "simple_query":
+        # 简单查询快速通道：并行检索，跳过 Agent
+        search_results = parallel_search_all_sync(resolved_question, top_k=5)
+        from types import SimpleNamespace
+        for tool_name, items in search_results.items():
+            if items:
+                action = SimpleNamespace(tool=f"search_{tool_name}")
+                steps.append((action, items))
+        ai_answer = _generate_answer_from_context(
+            build_tool_context_from_results(search_results),
+            question, chat_history_text, history_data, settings
+        )
+    else:
+        # Agent 推理 — OpenAI Tools Agent，支持并行工具调用
+        logging.info("已加载搜索工具: 3个 (OpenAI Tools Agent)")
+        agent_executor = _build_agent_executor(settings)
+
+        # follow_up 追问时注入对话历史，让 Agent 理解上下文
+        agent_chat_history = history_data if intent == "follow_up" else []
+
+        try:
+            result = await agent_executor.ainvoke({
+                "input": resolved_question,
+                "chat_history": agent_chat_history,
+            })
+        except Exception as e:
+            logging.error(f"Agent执行失败: {type(e).__name__}: {e}")
+            raise
+
+        steps = result.get("intermediate_steps", [])
+        ai_answer = result.get("output", "抱歉，我暂时无法回答您的问题。")
+
+    end_time = time.time()
+    processing_time_ms = int((end_time - start_time) * 1000)
+    data = create_data_card(steps)
+
+    # 写入语义缓存
+    data_cards_dict = [card.model_dump() if hasattr(card, 'model_dump') else card.dict() for card in data]
+    try:
+        cache.set(question, ai_answer, data_cards_dict)
+    except Exception as e:
+        logging.warning(f"缓存写入失败: {e}")
+
+    return AiConsultResponse(
+        answer=ai_answer,
+        data_cards=data,
+        session_id=request.session_id,
+        user_id=request.user_id,
+        turn_number=len(history_data) // 2 + 1,
+        processing_time_ms=processing_time_ms,
+    )
+
+
+def _generate_answer_from_context(tool_context: str, question: str,
+                                   chat_history_text: str, history_data: list,
+                                   settings) -> str:
+    """从工具上下文直接生成回答（用于简单查询快速通道，非流式）"""
+    llm = ChatTongyi(
+        api_key=settings.DASHSCOPE_API_KEY,
+        model=settings.OPENAI_MODEL,
+        top_p=0.7,
+        streaming=False,
+    )
+    system_content = STREAM_ANSWER_PROMPT.format(
+        tool_context=tool_context,
+        question=question,
+        chat_history=chat_history_text,
+    )
+    messages = [SystemMessage(content=system_content)]
+    for msg in history_data:
+        messages.append(msg)
+    messages.append(HumanMessage(content=question))
+
+    result = llm.invoke(messages)
+    return result.content
+
+
+def _sse_event(event_type: str, data) -> str:
+    """构建 SSE 事件字符串"""
+    payload = {"type": event_type, "content": data} if isinstance(data, str) else {"type": event_type, **data}
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 def _build_tool_context(steps: list) -> str:
     """从 Agent 中间步骤构建工具上下文文本"""
@@ -280,61 +546,111 @@ def _build_tool_context(steps: list) -> str:
     return "\n\n".join(context_parts) if context_parts else "无工具检索结果"
 
 
-def consult_stream(request: AiConsultRequest) -> Generator[str, None, None]:
+async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]:
     """
-    流式 AI 咨询生成器。
-    策略：先同步执行 Agent 获取工具结果，再用 LLM 流式生成最终答案。
+    流式 AI 咨询异步生成器（两阶段分离架构）。
+    阶段 1: pre_analyze — 代词消解 + 意图分类（0.5-1s）
+    阶段 2: Agent 推理 — OpenAI Tools Agent 支持并行工具调用（10-30s）
+    阶段 3: 流式生成 — 注入对话历史 + 工具结果（3-8s）
     Yields SSE 格式的事件字符串。
     """
     start_time = time.time()
 
-    # 1. 问题重写
-    new_result = get_new_question(request)
-    new_question = new_result[0]
-    history_data = new_result[1]
+    question = request.question
+    conversation_history = request.conversation_history or []
+    history_data = build_history_messages(conversation_history)
+    chat_history_text = build_chat_history_text(conversation_history)
 
-    # 2. 同步执行 Agent 获取工具调用结果
-    tools = create_search_tools()
-    logging.info(f"已经加载搜索工具: {len(tools)}个")
+    logging.info(f"原始问题: {question}")
+    logging.info(f"对话历史轮次: {len(conversation_history)}")
 
-    settings = get_settings()
-    agent_llm = ChatTongyi(
-        api_key=settings.DASHSCOPE_API_KEY,
-        model=settings.OPENAI_MODEL,
-        top_p=0.7,
-        streaming=False,
-    )
-
-    agent_prompt = PromptTemplate(
-        template=REACT_SYSTEM_PROMPT,
-        input_variables=["input", "tools", "tool_names", "agent_scratchpad"]
-    )
-
-    agent = create_react_agent(agent_llm, tools, agent_prompt)
-    agent_executor = AgentExecutor(
-        agent=agent,
-        tools=tools,
-        max_iterations=settings.AGENT_MAX_ITERATIONS,
-        handle_parsing_errors=True,
-        verbose=True,
-        return_intermediate_steps=True,
-    )
-
-    try:
-        result = agent_executor.invoke({"input": new_question})
-    except Exception as e:
-        logging.error(f"Agent执行失败: {type(e).__name__}: {e}")
-        error_event = json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False)
-        yield f"data: {error_event}\n\n"
+    # ==================== 语义缓存检查 ====================
+    cache = SemanticCache()
+    cached = cache.get(question)
+    if cached and not cached.get("need_refresh"):
+        logging.info(f"[缓存命中] score={cached['score']:.4f}")
+        yield _sse_event("status", "命中缓存，正在返回...")
+        yield _sse_event("token", cached["answer"])
+        total_time_ms = int((time.time() - start_time) * 1000)
+        complete_data = {
+            "type": "complete",
+            "answer": cached["answer"],
+            "data_cards": cached["data_cards"],
+            "session_id": request.session_id,
+            "user_id": request.user_id,
+            "turn_number": len(history_data) // 2 + 1,
+            "processing_time_ms": total_time_ms,
+        }
+        yield f"data: {json.dumps(complete_data, ensure_ascii=False)}\n\n"
         return
 
-    steps = result.get("intermediate_steps", [])
-    processing_time_ms = int((time.time() - start_time) * 1000)
+    # ==================== 阶段 1: 轻量预分析 ====================
+    yield _sse_event("status", "正在分析您的问题...")
+    analysis = pre_analyze(question, conversation_history)
+    resolved_question = analysis["resolved_question"]
+    intent = analysis["intent"]
+    logging.info(f"[阶段1] 预分析完成: intent={intent}, resolved={resolved_question[:50]}")
 
-    # 3. 构建工具上下文
-    tool_context = _build_tool_context(steps)
+    # 闲聊快速返回
+    if intent == "chitchat":
+        yield _sse_event("token", GREETINGS)
+        total_time_ms = int((time.time() - start_time) * 1000)
+        complete_data = {
+            "type": "complete",
+            "answer": GREETINGS,
+            "data_cards": [],
+            "session_id": request.session_id,
+            "user_id": request.user_id,
+            "turn_number": len(history_data) // 2 + 1,
+            "processing_time_ms": total_time_ms,
+        }
+        yield f"data: {json.dumps(complete_data, ensure_ascii=False)}\n\n"
+        return
 
-    # 4. 用 LLM 流式生成最终答案
+    settings = get_settings()
+    tool_context = ""
+    steps = []
+
+    if intent == "simple_query":
+        # ==================== 简单查询快速通道：并行检索 + 直接生成 ====================
+        yield _sse_event("status", "正在检索法律信息...")
+        search_results = parallel_search_all_sync(resolved_question, top_k=5)
+        tool_context = build_tool_context_from_results(search_results)
+        # 构造 fake steps 用于 create_data_card
+        from types import SimpleNamespace
+        for tool_name, items in search_results.items():
+            if items:
+                action = SimpleNamespace(tool=f"search_{tool_name}")
+                steps.append((action, items))
+        agent_time_ms = int((time.time() - start_time) * 1000)
+        logging.info(f"[快速通道] 并行检索完成: {agent_time_ms}ms, 结果 {sum(len(v) for v in search_results.values())} 条")
+        yield _sse_event("status", f"检索完成，正在生成回答...")
+    else:
+        # ==================== 阶段 2: Agent 推理（并行工具调用） ====================
+        yield _sse_event("status", "正在检索法律信息...")
+        logging.info("已加载搜索工具: 3个 (OpenAI Tools Agent)")
+        agent_executor = _build_agent_executor(settings)
+
+        # follow_up 追问时注入对话历史，让 Agent 理解上下文
+        agent_chat_history = history_data if intent == "follow_up" else []
+
+        try:
+            result = await agent_executor.ainvoke({
+                "input": resolved_question,
+                "chat_history": agent_chat_history,
+            })
+        except Exception as e:
+            logging.error(f"Agent执行失败: {type(e).__name__}: {e}")
+            yield _sse_event("error", {"message": str(e)})
+            return
+
+        steps = result.get("intermediate_steps", [])
+        tool_context = _build_tool_context(steps)
+        agent_time_ms = int((time.time() - start_time) * 1000)
+        logging.info(f"[阶段2] Agent 推理完成: {agent_time_ms}ms, 工具调用 {len(steps)} 次")
+        yield _sse_event("status", f"找到 {len(steps)} 条相关信息，正在生成回答...")
+
+    # ==================== 阶段 3: 流式生成（注入历史） ====================
     stream_llm = ChatTongyi(
         api_key=settings.DASHSCOPE_API_KEY,
         model=settings.OPENAI_MODEL,
@@ -343,11 +659,15 @@ def consult_stream(request: AiConsultRequest) -> Generator[str, None, None]:
     )
 
     # 构建完整的消息列表（不使用模板，避免工具结果中的 {} 被当作格式化变量）
-    system_content = STREAM_ANSWER_PROMPT.format(tool_context=tool_context, question=new_question)
+    system_content = STREAM_ANSWER_PROMPT.format(
+        tool_context=tool_context,
+        question=question,
+        chat_history=chat_history_text,
+    )
     messages = [SystemMessage(content=system_content)]
     for msg in history_data:
         messages.append(msg)
-    messages.append(HumanMessage(content=new_question))
+    messages.append(HumanMessage(content=question))
 
     full_answer = ""
     try:
@@ -355,24 +675,28 @@ def consult_stream(request: AiConsultRequest) -> Generator[str, None, None]:
             token = chunk.content
             if token:
                 full_answer += token
-                token_event = json.dumps({"type": "token", "content": token}, ensure_ascii=False)
-                yield f"data: {token_event}\n\n"
+                yield f"data: {json.dumps({'type': 'token', 'content': token}, ensure_ascii=False)}\n\n"
     except Exception as e:
         logging.error(f"LLM 流式生成失败: {e}")
-        error_event = json.dumps({"type": "error", "message": f"生成失败: {str(e)}"}, ensure_ascii=False)
-        yield f"data: {error_event}\n\n"
+        yield _sse_event("error", {"message": f"生成失败: {str(e)}"})
         return
 
-    # 5. 构建数据卡片
+    # ==================== 发送 complete 事件 ====================
     data_cards = create_data_card(steps)
     total_time_ms = int((time.time() - start_time) * 1000)
 
-    # 6. 发送 complete 事件
     data_cards_dict = []
     for card in data_cards:
         card_dict = card.model_dump() if hasattr(card, 'model_dump') else card.dict()
         data_cards_dict.append(card_dict)
 
+    # 写入语义缓存（异步，不阻塞响应）
+    try:
+        cache.set(question, full_answer, data_cards_dict)
+    except Exception as e:
+        logging.warning(f"缓存写入失败: {e}")
+
+    logging.info(f"花费时间: {total_time_ms} ms")
     complete_event = json.dumps({
         "type": "complete",
         "answer": full_answer,
@@ -385,34 +709,34 @@ def consult_stream(request: AiConsultRequest) -> Generator[str, None, None]:
     yield f"data: {complete_event}\n\n"
 
 
-
 if __name__ == '__main__':
-
     # 首先初始化 Milvus 连接
     print("正在初始化 Milvus 连接...")
     try:
         init_milvus()
-        print("✓ Milvus 连接成功\n")
+        print("Milvus 连接成功\n")
     except Exception as e:
-        print(f"✗ Milvus 连接失败: {e}")
+        print(f"Milvus 连接失败: {e}")
         exit(1)
 
     a1 = AiConsultRequest(
-        question="能再给出我详细一点的解决？",
+        # question="能再给出我详细一点的解决",
+        question="我租的房子合同还没到期，房东说要卖房让我提前搬走，还以'卫生没打扫干净'为由扣了我全部押金。这合法吗？",
         session_id="lease-dispute-001",
         user_id=456,
         conversation_history=[
-            ConversationHistoryMessage(
-                role="user",
-                content="我租的房子合同还没到期，房东说要卖房让我提前搬走，还以‘卫生没打扫干净’为由扣了我全部押金。这合法吗？",
-                timestamp=parser.parse("2026-04-18T09:00:00Z")
-            ),
-            ConversationHistoryMessage(
-                role="assistant",
-                content="根据《民法典》第725条‘买卖不破租赁’原则，房东卖房不影响你的租赁合同效力，他无权强制你提前搬离。至于押金，如果合同未明确约定‘卫生标准’作为扣款条件，且你已尽到一般清洁义务，房东无权全额扣押。建议你先保留租赁合同、押金收据、房屋交接时的照片/视频等证据。",
-                timestamp=parser.parse("2026-04-18T09:00:08Z")
-            ),
+            # ConversationHistoryMessage(
+            #     role="user",
+            #     content="我租的房子合同还没到期，房东说要卖房让我提前搬走，还以'卫生没打扫干净'为由扣了我全部押金。这合法吗？",
+            #     timestamp=parser.parse("2026-04-18T09:00:00Z")
+            # ),
+            # ConversationHistoryMessage(
+            #     role="assistant",
+            #     content="根据《民法典》第725条'买卖不破租赁'原则，房东卖房不影响你的租赁合同效力，他无权强制你提前搬离。至于押金，如果合同未明确约定'卫生标准'作为扣款条件，且你已尽到一般清洁义务，房东无权全额扣押。建议你先保留租赁合同、押金收据、房屋交接时的照片/视频等证据。",
+            #     timestamp=parser.parse("2026-04-18T09:00:08Z")
+            # ),
         ]
     )
-    result =consult(a1)
-    print( result)
+    import asyncio
+    result = asyncio.run(consult(a1))
+    print(result)

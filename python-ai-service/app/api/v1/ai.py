@@ -35,7 +35,7 @@ async def ai_consult(request: AiConsultRequest)-> ClientState:
     try:
         ensure_milvus_ready()
         logging.info("✓ Milvus 连接成功")
-        result=consult(request)
+        result = await consult(request)
         return ClientState(status="success", message="成功获取AI咨询结果", data=result)
 
     except Exception as e:

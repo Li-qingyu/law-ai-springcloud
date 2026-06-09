@@ -298,18 +298,23 @@ public class MilvusSyncServiceImpl implements MilvusSyncService {
      * 删除咨询历史
      */
     @Override
-    public void deleteAiConsultation(List<Long> ids) {
-        if (ids == null || ids.isEmpty()) {
-            return;
+    public void deleteAiConsultation(List<String> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return ;
         }
-        String filter = buildDeleteIdsFilter(ids, "consult_history_");
+
+        List<String> quotedIds = new ArrayList<>();
+        for (String docId : sessionIds) {
+            quotedIds.add("'" + docId + "'");
+        }
+        String filter = "session_id in [" + String.join(", ", quotedIds) + "]";
         DeleteReq deleteReq = DeleteReq.builder()
                 .collectionName("consult_history")
                 .filter(filter)
                 .build();
         try {
             milvusClientV2.delete(deleteReq);
-            log.info("Milvus成功删除咨询历史: {}", ids);
+            log.info("Milvus成功删除咨询历史: {}", sessionIds);
         } catch (MilvusException e) {
             throw new MilvusVectorException( "Milvus成功删除咨询历史异常");
         }
