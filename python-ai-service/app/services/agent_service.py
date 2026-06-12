@@ -204,6 +204,7 @@ STREAM_ANSWER_PROMPT = """你是一位专业、严谨的法律信息助理。请
 - 引用来源：用括号注明来源，如（《中华人民共和国劳动合同法》第46条）
 - 禁止编造：只基于提供的工具结果回答
 - 免责声明：末尾提醒"本回答仅供参考，不构成正式法律意见"
+- 最后格式按照md文档对应格式生成。
 
 请直接给出回答，不要重复问题本身。"""
 
@@ -265,12 +266,13 @@ def _build_minimal_context(conversation_history: list) -> str:
 
 
 
-def pre_analyze(question: str, conversation_history: list) -> dict:
+async def pre_analyze(question: str, conversation_history: list) -> dict:
     """
     轻量预分析：代词消解 + 意图分类
     - 无历史时：纯规则分类，不调用 LLM（< 10ms）
     - 有历史时：规则优先，LLM 兜底（0.5-1s）
     """
+    import asyncio
     has_history = bool(conversation_history)
 
     # 1. 规则快速分类
@@ -281,7 +283,7 @@ def pre_analyze(question: str, conversation_history: list) -> dict:
         logging.info(f"[pre_analyze] 规则分类: intent={intent}, question={question[:50]}")
         return {"resolved_question": question, "intent": intent}
 
-    # 3. 有历史或规则未命中 → LLM 兜底
+    # 3. 有历史或规则未命中 → LLM 兜底（在线程池中执行，避免阻塞事件循环）
     settings = get_settings()
     llm = ChatTongyi(
         api_key=settings.DASHSCOPE_API_KEY,
@@ -294,7 +296,9 @@ def pre_analyze(question: str, conversation_history: list) -> dict:
     prompt = PRE_ANALYZE_PROMPT.format(context=context, question=question)
 
     try:
-        result = llm.invoke(prompt)
+        # 使用 run_in_executor 避免阻塞事件循环
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, llm.invoke, prompt)
         content = result.content.strip()
         # 提取 JSON（处理可能的 markdown 包裹）
         if "```" in content:
@@ -340,7 +344,7 @@ def _build_agent_executor(settings) -> AgentExecutor:
     )
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", AGENT_SYSTEM_PROMPT),
+        ("system",  AGENT_SYSTEM_PROMPT),
         MessagesPlaceholder("chat_history", optional=True),
         ("human", "{input}"),
         MessagesPlaceholder("agent_scratchpad"),
@@ -428,7 +432,7 @@ async def consult(request: AiConsultRequest):
         )
 
     # 阶段 1: 轻量预分析
-    analysis = pre_analyze(question, conversation_history)
+    analysis = await pre_analyze(question, conversation_history)
     resolved_question = analysis["resolved_question"]
     intent = analysis["intent"]
     logging.info(f"[阶段1] 预分析完成: intent={intent}, resolved={resolved_question[:50]}")
@@ -586,7 +590,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
 
     # ==================== 阶段 1: 轻量预分析 ====================
     yield _sse_event("status", "正在分析您的问题...")
-    analysis = pre_analyze(question, conversation_history)
+    analysis = await pre_analyze(question, conversation_history)
     resolved_question = analysis["resolved_question"]
     intent = analysis["intent"]
     logging.info(f"[阶段1] 预分析完成: intent={intent}, resolved={resolved_question[:50]}")
@@ -634,18 +638,38 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
         # follow_up 追问时注入对话历史，让 Agent 理解上下文
         agent_chat_history = history_data if intent == "follow_up" else []
 
+        steps = []
+        tool_context = ""
         try:
-            result = await agent_executor.ainvoke({
+            # 使用 astream_events 获取实时进度
+            async for event in agent_executor.astream_events({
                 "input": resolved_question,
                 "chat_history": agent_chat_history,
-            })
+            }, version="v2"):
+                event_kind = event.get("event")
+                if event_kind == "on_tool_start":
+                    tool_name = event.get("name", "unknown")
+                    logging.info(f"[Agent] 工具调用开始: {tool_name}")
+                    yield _sse_event("progress", {
+                        "step": "tool_call",
+                        "tool": tool_name,
+                        "status": "calling"
+                    })
+                elif event_kind == "on_tool_end":
+                    logging.info(f"[Agent] 工具调用完成")
+                    yield _sse_event("progress", {
+                        "step": "tool_result",
+                        "status": "complete"
+                    })
+                elif event_kind == "on_chain_end" and event.get("name") == "AgentExecutor":
+                    result = event.get("data", {}).get("output", {})
+                    steps = result.get("intermediate_steps", [])
+                    tool_context = _build_tool_context(steps)
         except Exception as e:
             logging.error(f"Agent执行失败: {type(e).__name__}: {e}")
             yield _sse_event("error", {"message": str(e)})
             return
 
-        steps = result.get("intermediate_steps", [])
-        tool_context = _build_tool_context(steps)
         agent_time_ms = int((time.time() - start_time) * 1000)
         logging.info(f"[阶段2] Agent 推理完成: {agent_time_ms}ms, 工具调用 {len(steps)} 次")
         yield _sse_event("status", f"找到 {len(steps)} 条相关信息，正在生成回答...")

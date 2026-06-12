@@ -84,8 +84,8 @@ public class AIConsultController {
                         JSONObject event = JSONObject.parseObject(eventData);
                         String type = event.getString("type");
 
-                        if ("token".equals(type)) {
-                            // 转发 token 事件给前端（无名事件，前端通过 data 中的 type 字段区分）
+                        if ("status".equals(type) || "progress".equals(type) || "token".equals(type)) {
+                            // 转发状态、进度、token 事件给前端
                             emitter.send(eventData);
                         } else if ("complete".equals(type)) {
                             // 转换 data_cards 为前端期望的嵌套结构

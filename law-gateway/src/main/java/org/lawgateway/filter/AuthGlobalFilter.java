@@ -56,8 +56,11 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        // 获取token
+        // 获取token（优先从Header获取，SSE等不支持Header的场景从Query参数获取）
         String token = request.getHeaders().getFirst(tokenName);
+        if (token == null || token.isEmpty()) {
+            token = request.getQueryParams().getFirst(tokenName);
+        }
         if (token == null || token.isEmpty()) {
             log.warn("请求缺少token: {}", path);
             ServerHttpResponse response = exchange.getResponse();
