@@ -11,6 +11,15 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from app.builders.data_card_builder import DataCardBuilder
 from app.core.config import get_settings, Settings
 
+# 检索优化模块
+from app.retrieval.retriever import Retriever
+from app.retrieval.strategies.vector_strategy import VectorStrategy
+from app.retrieval.strategies.multi_query_strategy import MultiQueryStrategy
+from app.retrieval.pipelines.base import RetrievalPipeline
+from app.retrieval.pipelines.dedup import DedupStep
+from app.retrieval.pipelines.rerank import DashScopeReranker, NoopReranker, RerankStep
+from app.retrieval.params import get_params
+
 # ==================== Monkey-patch ChatTongyi streaming bug ====================
 # langchain_community ChatTongyi 的 subtract_client_response 在流式 tool_calls 场景下
 # 当前 chunk 的 tool_calls 数量 > 上一个 chunk 时，index 越界导致 IndexError。
@@ -207,6 +216,39 @@ STREAM_ANSWER_PROMPT = """你是一位专业、严谨的法律信息助理。请
 - 最后格式按照md文档对应格式生成。
 
 请直接给出回答，不要重复问题本身。"""
+
+
+def build_retriever(intent: str, llm=None) -> Retriever:
+    """
+    根据意图构建 Retriever 实例
+    - 策略决定"怎么召回"（向量 / 多路改写）
+    - 管道决定"怎么处理"（去重 + 精排）
+    """
+    params = get_params(intent)
+    settings = get_settings()
+
+    # 基础检索策略
+    base_strategy = VectorStrategy()
+
+    # 多路改写包装（可叠加在任何基础策略之上）
+    if params.use_multi_query and settings.MULTI_QUERY_ENABLED and llm:
+        strategy = MultiQueryStrategy(llm=llm, inner_strategy=base_strategy)
+    else:
+        strategy = base_strategy
+
+    # 选精排器
+    if settings.RERANK_ENABLED:
+        reranker = DashScopeReranker(api_key=settings.DASHSCOPE_API_KEY)
+    else:
+        reranker = NoopReranker()
+
+    # 组装管道
+    pipeline = RetrievalPipeline(steps=[
+        DedupStep(),
+        RerankStep(reranker, top_n=params.final_k),
+    ])
+
+    return Retriever(strategy=strategy, pipeline=pipeline)
 
 
 def build_chat_history_text(conversation_history: list) -> str:
@@ -452,6 +494,17 @@ async def consult(request: AiConsultRequest):
     settings = get_settings()
     steps = []
 
+    # 构建 Retriever 并设置全局实例
+    llm = ChatTongyi(
+        api_key=settings.DASHSCOPE_API_KEY,
+        model=settings.OPENAI_MODEL,
+        top_p=0.7,
+        streaming=False,
+    )
+    retriever = build_retriever(intent, llm=llm)
+    from app.tools.base_search_tool import set_retriever
+    set_retriever(retriever)
+
     if intent == "simple_query":
         # 简单查询快速通道：并行检索，跳过 Agent
         search_results = parallel_search_all_sync(resolved_question, top_k=5)
@@ -614,6 +667,17 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
     settings = get_settings()
     tool_context = ""
     steps = []
+
+    # 构建 Retriever 并设置全局实例
+    llm = ChatTongyi(
+        api_key=settings.DASHSCOPE_API_KEY,
+        model=settings.OPENAI_MODEL,
+        top_p=0.7,
+        streaming=False,
+    )
+    retriever = build_retriever(intent, llm=llm)
+    from app.tools.base_search_tool import set_retriever
+    set_retriever(retriever)
 
     if intent == "simple_query":
         # ==================== 简单查询快速通道：并行检索 + 直接生成 ====================

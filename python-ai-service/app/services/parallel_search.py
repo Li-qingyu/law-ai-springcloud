@@ -4,7 +4,7 @@
 """
 import asyncio
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from app.core.config import get_settings
 from app.repositories.milvus_client import search_by_text
@@ -13,9 +13,19 @@ logger = logging.getLogger(__name__)
 
 
 async def _async_search(collection_name: str, query_text: str,
-                        top_k: int = None, min_score: float = None) -> List[Dict[str, Any]]:
-    """将同步的 search_by_text 放入线程池执行"""
+                        top_k: int = None, min_score: float = None,
+                        retriever=None) -> List[Dict[str, Any]]:
+    """将同步的检索放入线程池执行"""
     loop = asyncio.get_event_loop()
+    if retriever:
+        return await loop.run_in_executor(
+            None,
+            lambda: retriever.retrieve(
+                query_text, collection_name,
+                recall_k=top_k * 4 if top_k else 20,
+                final_k=top_k or 5,
+            )
+        )
     return await loop.run_in_executor(
         None,
         lambda: search_by_text(
@@ -27,9 +37,15 @@ async def _async_search(collection_name: str, query_text: str,
     )
 
 
-async def parallel_search_all(query_text: str, top_k: int = 5) -> Dict[str, List[Dict]]:
+async def parallel_search_all(query_text: str, top_k: int = 5,
+                               retriever=None) -> Dict[str, List[Dict]]:
     """
     并行检索所有 Milvus 集合（法条、案例、历史）。
+
+    Args:
+        query_text: 查询文本
+        top_k: 每个集合返回结果数
+        retriever: 可选的 Retriever 实例
 
     Returns:
         {"law_articles": [...], "law_cases": [...], "consult_history": [...]}
@@ -42,7 +58,7 @@ async def parallel_search_all(query_text: str, top_k: int = 5) -> Dict[str, List
     }
 
     tasks = {
-        name: _async_search(col, query_text, top_k=top_k)
+        name: _async_search(col, query_text, top_k=top_k, retriever=retriever)
         for name, col in collections.items()
     }
 
@@ -60,10 +76,16 @@ async def parallel_search_all(query_text: str, top_k: int = 5) -> Dict[str, List
     return results
 
 
-def parallel_search_all_sync(query_text: str, top_k: int = 5) -> Dict[str, List[Dict]]:
+def parallel_search_all_sync(query_text: str, top_k: int = 5,
+                              retriever=None) -> Dict[str, List[Dict]]:
     """
     同步版本的并行检索（用于非 async 上下文）。
     使用 ThreadPoolExecutor 并行执行。
+
+    Args:
+        query_text: 查询文本
+        top_k: 每个集合返回结果数
+        retriever: 可选的 Retriever 实例
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -76,10 +98,20 @@ def parallel_search_all_sync(query_text: str, top_k: int = 5) -> Dict[str, List[
 
     results = {}
     with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {
-            name: executor.submit(search_by_text, col, query_text, top_k)
-            for name, col in collections.items()
-        }
+        if retriever:
+            futures = {
+                name: executor.submit(
+                    retriever.retrieve,
+                    query_text, col,
+                    top_k * 4, top_k,
+                )
+                for name, col in collections.items()
+            }
+        else:
+            futures = {
+                name: executor.submit(search_by_text, col, query_text, top_k)
+                for name, col in collections.items()
+            }
         for name, future in futures.items():
             try:
                 results[name] = future.result()

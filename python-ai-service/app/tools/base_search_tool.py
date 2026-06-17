@@ -4,7 +4,7 @@
 """
 import asyncio
 from abc import abstractmethod
-from typing import List, Dict, Any, Optional,Type
+from typing import List, Dict, Any, Optional, Type
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 import logging
@@ -13,6 +13,21 @@ from app.repositories.milvus_client import search_by_text
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# 延迟导入避免循环依赖
+_retriever_instance = None
+
+
+def _get_retriever():
+    """获取全局 Retriever 实例（延迟导入）"""
+    global _retriever_instance
+    return _retriever_instance
+
+
+def set_retriever(retriever):
+    """设置全局 Retriever 实例"""
+    global _retriever_instance
+    _retriever_instance = retriever
 
 class SearchInput(BaseModel):
     """搜索工具输入参数"""
@@ -66,12 +81,19 @@ class BaseSearchTool(BaseTool):
         try:
             logger.info(f"[{self.name}] 搜索: {query}")
 
-            results = search_by_text(
-                collection_name=self.collection_name,
-                query_text=query,
-                top_k=self.top_k,
-                output_fields=["source_id", "content_json"]
-            )
+            retriever = _get_retriever()
+            if retriever:
+                results = retriever.retrieve(
+                    query, self.collection_name,
+                    recall_k=self.top_k * 4, final_k=self.top_k,
+                )
+            else:
+                results = search_by_text(
+                    collection_name=self.collection_name,
+                    query_text=query,
+                    top_k=self.top_k,
+                    output_fields=["source_id", "content_json"]
+                )
 
             if not results:
                 return f"未找到相关的{self._get_data_type_name()}"
@@ -96,7 +118,7 @@ class BaseSearchTool(BaseTool):
             logger.error(f"[{self.name}] 搜索失败: {e}", exc_info=True)
             return f"搜索失败: {str(e)}"
 
-    def _search_row (self, query: str) -> List[Dict[str, Any]]:
+    def _search_row(self, query: str) -> List[Dict[str, Any]]:
         """
         执行搜索并返回结果行
 
@@ -108,12 +130,20 @@ class BaseSearchTool(BaseTool):
         """
         try:
             logger.info(f"[{self.name}] 搜索: {query}")
-            results=search_by_text(
-                collection_name=self.collection_name,
-                query_text=query,
-                top_k=self.top_k,
-                output_fields=["source_id", "content_json"]
-            )
+
+            retriever = _get_retriever()
+            if retriever:
+                results = retriever.retrieve(
+                    query, self.collection_name,
+                    recall_k=self.top_k * 4, final_k=self.top_k,
+                )
+            else:
+                results = search_by_text(
+                    collection_name=self.collection_name,
+                    query_text=query,
+                    top_k=self.top_k,
+                    output_fields=["source_id", "content_json"]
+                )
             logger.info(f"[{self.name}] 找到 {len(results)} 条原始结果")
             return results
         except Exception as e:

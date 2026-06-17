@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     TOOL_SCORE_THRESHOLD: float = 0.7
     TOP_K_RESULTS: int = 5
 
+    # 检索优化开关
+    RERANK_ENABLED: bool = True  #重排是否需要开启
+    MULTI_QUERY_ENABLED: bool = True  #问题多路改写是否需要开启
+
     # 语义缓存配置
     SEMANTIC_CACHE_ENABLED: bool = True
     SEMANTIC_CACHE_COLLECTION: str = "semantic_cache"
