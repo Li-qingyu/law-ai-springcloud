@@ -40,7 +40,7 @@
         <aliyun.sdk.oss>3.17.4</aliyun.sdk.oss>
         <knife4j>3.0.2</knife4j>
         <jjwt>0.12.6</jjwt>
-        <milvus>2.4.5</milvus>
+        <milvus>2.6.20</milvus>
     </properties>
 
     <dependencyManagement>

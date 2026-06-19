@@ -40,5 +40,5 @@ public interface LawCaseMapper {
 
     List<LawCase> all();
 
-    LawCaseVO getCard(Long id, Integer typeId);
+    LawCaseVO getCard(Long id);
 }

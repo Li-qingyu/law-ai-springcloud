@@ -27,5 +27,5 @@ public interface LawCaseService {
 
     String addLawCaseToMilvusAsync();
 
-    LawCaseVO getCard(Long id, Integer typeId);
+    LawCaseVO getCard(Long id);
 }

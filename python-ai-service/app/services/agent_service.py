@@ -66,6 +66,8 @@ from app.services.parallel_search import parallel_search_all_sync, build_tool_co
 from app.services.semantic_cache import SemanticCache
 from app.tools import create_search_tools
 from app.builders import data_card_builder
+from app.memory.working_memory import WorkingMemory, build_memory_header, extract_reference_anchor
+from app.memory.short_term_memory import ShortTermMemory
 from langchain_community.chat_models import ChatTongyi
 
 # ==================== 两阶段分离架构 ====================
@@ -255,19 +257,44 @@ def build_retriever(intent: str, llm=None) -> Retriever:
     return Retriever(strategy=strategy, pipeline=pipeline)
 
 
-def build_chat_history_text(conversation_history: list) -> str:
-    """将对话历史格式化为可读文本，用于流式生成阶段注入"""
-    if not conversation_history:
+def build_chat_history_text(conversation_history: list, memory_header: str = "") -> str:
+    """
+    将对话历史格式化为可读文本，用于流式生成阶段注入。
+    使用工作记忆窗口管理，仅保留最近 2-3 轮，避免 token 浪费。
+    """
+    parts = []
+
+    # 1. 注入会话元信息摘要头（来自短期记忆）
+    if memory_header:
+        parts.append(memory_header)
+
+    # 2. 工作记忆：最近 2-3 轮
+    wm = WorkingMemory()
+    working_context = wm.build_context(conversation_history)
+    if working_context:
+        parts.append(working_context)
+    elif not parts:
         return "无对话历史"
-    
-    history_lines = []
-    for msg in conversation_history:
-        role = "用户" if msg.role == "user" else "助手"
-        # 截断过长的回答，避免 token 浪费
-        content = msg.content[:500] + "..." if len(msg.content) > 500 else msg.content
-        history_lines.append(f"{role}：{content}")
-    
-    return "\n".join(history_lines)
+
+    # 3. 引用锚点
+    anchor = extract_reference_anchor(conversation_history)
+    if anchor:
+        parts.append(anchor)
+
+    return "\n".join(parts)
+
+
+def build_history_messages(conversation_history: list) -> List:
+    """将对话历史转为 LangChain Message 列表，仅包含工作记忆窗口内的消息"""
+    wm = WorkingMemory()
+    working_turns = wm.get_working_turns_for_history(conversation_history)
+    history_data = []
+    for message in working_turns:
+        if message.role == "user":
+            history_data.append(HumanMessage(content=message.content))
+        elif message.role == "assistant":
+            history_data.append(AIMessage(content=message.content))
+    return history_data
 
 
 
@@ -364,15 +391,6 @@ async def pre_analyze(question: str, conversation_history: list) -> dict:
         }
 
 
-def build_history_messages(conversation_history: list) -> List:
-    """将对话历史转为 LangChain Message 列表，用于流式生成阶段"""
-    history_data = []
-    for message in conversation_history:
-        if message.role == "user":
-            history_data.append(HumanMessage(content=message.content))
-        elif message.role == "assistant":
-            history_data.append(AIMessage(content=message.content))
-    return history_data
 
 # 创建agent
 def _build_agent_executor(settings) -> AgentExecutor:
@@ -456,11 +474,18 @@ async def consult(request: AiConsultRequest):
 
     question = request.question
     conversation_history = request.conversation_history or []
+
+    # 加载短期记忆，构建记忆上下文
+    stm = ShortTermMemory(request.session_id)
+    short_term_summary = stm.get_summary()
+    round_count = stm.get_round_count()
+    memory_header = build_memory_header(short_term_summary, round_count) if short_term_summary else ""
+
     history_data = build_history_messages(conversation_history)
-    chat_history_text = build_chat_history_text(conversation_history)
+    chat_history_text = build_chat_history_text(conversation_history, memory_header)
 
     logging.info(f"原始问题: {question}")
-    logging.info(f"对话历史轮次: {len(conversation_history)}")
+    logging.info(f"对话历史轮次: {len(conversation_history)}, 记忆轮次: {round_count}")
 
     # 阶段 0: 语义缓存检查
     cache = SemanticCache()
@@ -552,6 +577,15 @@ async def consult(request: AiConsultRequest):
     except Exception as e:
         logging.warning(f"缓存写入失败: {e}")
 
+    # 更新短期记忆
+    try:
+        need_compress = stm.add_round(question, ai_answer)
+        if need_compress:
+            await stm.compress_pending(llm)
+            logging.info(f"[记忆] 短期记忆压缩完成: session={request.session_id}")
+    except Exception as e:
+        logging.warning(f"[记忆] 短期记忆更新失败: {e}")
+
     return AiConsultResponse(
         answer=ai_answer,
         data_cards=data,
@@ -619,11 +653,18 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
 
     question = request.question
     conversation_history = request.conversation_history or []
+
+    # 加载短期记忆，构建记忆上下文
+    stm = ShortTermMemory(request.session_id)
+    short_term_summary = stm.get_summary()
+    round_count = stm.get_round_count()
+    memory_header = build_memory_header(short_term_summary, round_count) if short_term_summary else ""
+
     history_data = build_history_messages(conversation_history)
-    chat_history_text = build_chat_history_text(conversation_history)
+    chat_history_text = build_chat_history_text(conversation_history, memory_header)
 
     logging.info(f"原始问题: {question}")
-    logging.info(f"对话历史轮次: {len(conversation_history)}")
+    logging.info(f"对话历史轮次: {len(conversation_history)}, 记忆轮次: {round_count}")
 
     # ==================== 语义缓存检查 ====================
     cache = SemanticCache()
@@ -787,6 +828,15 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
         cache.set(question, full_answer, data_cards_dict)
     except Exception as e:
         logging.warning(f"缓存写入失败: {e}")
+
+    # 更新短期记忆
+    try:
+        need_compress = stm.add_round(question, full_answer)
+        if need_compress:
+            await stm.compress_pending()
+            logging.info(f"[记忆] 短期记忆压缩完成: session={request.session_id}")
+    except Exception as e:
+        logging.warning(f"[记忆] 短期记忆更新失败: {e}")
 
     logging.info(f"花费时间: {total_time_ms} ms")
     complete_event = json.dumps({

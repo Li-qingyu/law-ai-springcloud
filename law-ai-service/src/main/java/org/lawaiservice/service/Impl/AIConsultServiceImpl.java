@@ -165,9 +165,8 @@ public class AIConsultServiceImpl implements AIConsultService {
             }else if(type.equals("law_case")){
 
                 Long id = data_card.getLong("id");
-                Integer typeId = data_card.getInteger("type_id");
                 //通过Feign调用law-law-service获取案例卡片
-                LawCaseVO lawCaseVO = lawServiceFeignClient.getLawCaseCard(id, typeId).getData();
+                LawCaseVO lawCaseVO = lawServiceFeignClient.getLawCaseCard(id).getData();
                 LawCaseDataCard lawCaseDataCard = LawCaseDataCard.builder()
                         .type(type)
                         .lawCaseVO(lawCaseVO)

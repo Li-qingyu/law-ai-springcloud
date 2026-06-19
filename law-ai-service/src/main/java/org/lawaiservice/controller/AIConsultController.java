@@ -180,9 +180,8 @@ public class AIConsultController {
                 }
             } else if ("law_case".equals(type)) {
                 Long id = card.getLong("id");
-                Integer typeId = card.getInteger("type_id");
                 //通过Feign调用law-law-service获取案例卡片
-                LawCaseVO lawCaseVO = lawServiceFeignClient.getLawCaseCard(id, typeId).getData();
+                LawCaseVO lawCaseVO = lawServiceFeignClient.getLawCaseCard(id).getData();
                 if (lawCaseVO != null) {
                     transformedCard.put("lawCaseVO", lawCaseVO);
                 }

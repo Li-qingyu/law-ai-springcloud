@@ -144,7 +144,7 @@ if __name__ == '__main__':
 
     settings=get_settings()
     # 向量搜索测试
-    text = "劳动合同"
+    text = "高某诉某农业有限公司农村土地承包合同案"
     results = search_by_text(settings.MILVUS_COLLECTION_CASES , text, top_k=3)
     results1 =hybrid_search(settings.MILVUS_COLLECTION_CASES , text)
     print(f"\n查询: {text}")
@@ -153,3 +153,7 @@ if __name__ == '__main__':
         print(f"   分类: {result}")
         print(f"   相似度分数: {result['score']:.4f}")
         print()
+    print("混合搜索")
+    for result in results1:
+        print(f"找到{result}")
+        print(f"相似度分数: {result['score']:.4f}")

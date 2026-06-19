@@ -65,10 +65,12 @@ def _serialize_content(question: str, answer: str, data_cards: list) -> str:
     }, ensure_ascii=False)
 
 
-def _deserialize_content(content_json_str: str) -> dict:
-    """将 JSON 字符串反序列化为 dict"""
+def _deserialize_content(content_json) -> dict:
+    """将 JSON 字符串或 dict 反序列化为 dict"""
+    if isinstance(content_json, dict):
+        return content_json
     try:
-        return json.loads(content_json_str)
+        return json.loads(content_json)
     except (json.JSONDecodeError, TypeError):
         return {"question": "", "answer": "", "data_cards": []}
 

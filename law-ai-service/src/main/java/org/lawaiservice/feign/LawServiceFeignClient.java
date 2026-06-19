@@ -21,5 +21,5 @@ public interface LawServiceFeignClient {
      * 根据ID和类型ID获取案例卡片
      */
     @GetMapping("/internal/cases/card")
-    Result<LawCaseVO> getLawCaseCard(@RequestParam("id") Long id, @RequestParam("typeId") Integer typeId);
+    Result<LawCaseVO> getLawCaseCard(@RequestParam("id") Long id);
 }

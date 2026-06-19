@@ -34,9 +34,9 @@ public class LawInternalController {
      * 根据ID和类型ID获取案例卡片（供其他微服务调用）
      */
     @GetMapping("/cases/card")
-    public Result<LawCaseVO> getLawCaseCard(@RequestParam Long id, @RequestParam Integer typeId) {
-        log.info("内部调用-获取案例卡片: id={}, typeId={}", id, typeId);
-        LawCaseVO lawCaseVO = lawCaseService.getCard(id, typeId);
+    public Result<LawCaseVO> getLawCaseCard(@RequestParam Long id) {
+        log.info("内部调用-获取案例卡片: id={}", id);
+        LawCaseVO lawCaseVO = lawCaseService.getCard(id);
         return Result.success(lawCaseVO);
     }
 }

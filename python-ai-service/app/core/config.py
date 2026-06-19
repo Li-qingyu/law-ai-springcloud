@@ -45,6 +45,14 @@ class Settings(BaseSettings):
     MULTI_QUERY_ENABLED: bool = True  #问题多路改写是否需要开启
     HYBRID_SEARCH_ENABLED: bool = True  #混合检索（向量+BM25）是否开启
 
+    # 对话记忆管理配置
+    MEMORY_WORKING_MAX_TURNS: int = 3          # 工作记忆保留轮数
+    MEMORY_WORKING_MAX_TOKENS: int = 2500       # 工作记忆 token 硬上限
+    MEMORY_SHORT_TERM_TTL_HOURS: int = 12       # 短期记忆 TTL（小时）
+    MEMORY_SHORT_TERM_MAX_TOKENS: int = 800     # 短期记忆摘要 token 上限
+    MEMORY_COMPRESS_THRESHOLD: int = 5          # 累积 N 轮触发压缩
+    MEMORY_DESENSITIZE_ENABLED: bool = True     # 隐私脱敏开关
+
     # 语义缓存配置
     SEMANTIC_CACHE_ENABLED: bool = True
     SEMANTIC_CACHE_COLLECTION: str = "semantic_cache"
