@@ -14,7 +14,7 @@ class RetrievalParams:
 # 意图 → 参数映射表（可外部配置化）
 INTENT_PARAMS = {
     "simple_query": RetrievalParams(recall_k=10, final_k=3, min_score=0.75, use_multi_query=False, use_hybrid=False),
-    "consultation": RetrievalParams(recall_k=20, final_k=5, min_score=0.55, use_multi_query=True,  use_hybrid=False),
+    "consultation": RetrievalParams(recall_k=20, final_k=5, min_score=0.55, use_multi_query=True,  use_hybrid=True),
     "follow_up":    RetrievalParams(recall_k=15, final_k=5, min_score=0.65, use_multi_query=False, use_hybrid=False),
 }
 

@@ -8,7 +8,7 @@ from app.retrieval.pipelines.base import PipelineStep
 
 logger = logging.getLogger(__name__)
 
-
+# 工具调用json转化为str来让rerank模型进行打分且重排
 def extract_text_from_content_json(content_json: dict) -> str:
     """
     从 content_json 中提取纯文本内容。

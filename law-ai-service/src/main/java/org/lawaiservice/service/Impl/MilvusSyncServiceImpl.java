@@ -52,6 +52,7 @@ public class MilvusSyncServiceImpl implements MilvusSyncService {
             row.addProperty("title", article.getArticleTitle());
             row.addProperty("content", truncate(article.getContent(), 1000));
             row.add("content_json", getJsonLawArticle(article));
+            row.addProperty("bm25_text", buildBm25Text(article.getArticleTitle(), article.getContent()));
             row.add("vector", gson.toJsonTree(vector).getAsJsonArray());
 
             UpsertReq upsertReq = UpsertReq.builder()
@@ -92,6 +93,7 @@ public class MilvusSyncServiceImpl implements MilvusSyncService {
                 row.addProperty("title", article.getArticleTitle());
                 row.addProperty("content", truncate(article.getContent(), 1000));
                 row.add("content_json", getJsonLawArticle(article));
+                row.addProperty("bm25_text", buildBm25Text(article.getArticleTitle(), article.getContent()));
                 row.add("vector", gson.toJsonTree(vector).getAsJsonArray());
                 rows.add(row);
             }
@@ -148,6 +150,7 @@ public class MilvusSyncServiceImpl implements MilvusSyncService {
             row.addProperty("title", lawCase.getTitle());
             row.addProperty("content", truncate(lawCase.getContent(), 1000));
             row.add("content_json", getJsonLawCase(lawCase));
+            row.addProperty("bm25_text", buildBm25Text(lawCase.getTitle(), lawCase.getContent()));
             // 向量
             JsonArray vectorArray = gson.toJsonTree(vector).getAsJsonArray();
             row.add("vector", vectorArray);
@@ -200,6 +203,7 @@ public class MilvusSyncServiceImpl implements MilvusSyncService {
                 row.addProperty("title", lawCase.getTitle());
                 row.addProperty("content", truncate(lawCase.getContent(), 1000));
                 row.add("content_json", getJsonLawCase(lawCase));
+                row.addProperty("bm25_text", buildBm25Text(lawCase.getTitle(), lawCase.getContent()));
                 // 向量
                 JsonArray vectorArray = gson.toJsonTree(vector).getAsJsonArray();
                 row.add("vector", vectorArray);
@@ -263,6 +267,7 @@ public class MilvusSyncServiceImpl implements MilvusSyncService {
             row.addProperty("session_id", consultation.getSessionId());
             row.addProperty("user_id", Long.valueOf(consultation.getUserId()));
             row.add("content_json", getJsonConsultHistory(consultation));
+            row.addProperty("bm25_text", buildBm25Text(consultation.getQuestion(), consultation.getAnswer()));
             // 向量
             JsonArray vectorArray = gson.toJsonTree(vector).getAsJsonArray();
             row.add("vector", vectorArray);
@@ -336,6 +341,15 @@ public class MilvusSyncServiceImpl implements MilvusSyncService {
         // 2. 长度判断：如果内容长度超过了规定的 maxLen（例如 1000）
         //    就截取前 maxLen 个字符；否则原样返回
         return content.length() > maxLen ? content.substring(0, maxLen) : content;
+    }
+
+    /**
+     * 构建 BM25 文本（字段加权：title/question 重复 3 次提高权重）
+     */
+    private String buildBm25Text(String highWeightField, String lowWeightField) {
+        String high = highWeightField != null ? highWeightField : "";
+        String low = lowWeightField != null ? lowWeightField : "";
+        return high + " " + high + " " + high + " " + low;
     }
 
     /**

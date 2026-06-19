@@ -14,6 +14,7 @@ from app.core.config import get_settings, Settings
 # 检索优化模块
 from app.retrieval.retriever import Retriever
 from app.retrieval.strategies.vector_strategy import VectorStrategy
+from app.retrieval.strategies.hybrid_strategy import HybridStrategy
 from app.retrieval.strategies.multi_query_strategy import MultiQueryStrategy
 from app.retrieval.pipelines.base import RetrievalPipeline
 from app.retrieval.pipelines.dedup import DedupStep
@@ -227,8 +228,11 @@ def build_retriever(intent: str, llm=None) -> Retriever:
     params = get_params(intent)
     settings = get_settings()
 
-    # 基础检索策略
-    base_strategy = VectorStrategy()
+    # 基础检索策略（向量 or 混合）
+    if params.use_hybrid and settings.HYBRID_SEARCH_ENABLED:
+        base_strategy = HybridStrategy()
+    else:
+        base_strategy = VectorStrategy()
 
     # 多路改写包装（可叠加在任何基础策略之上）
     if params.use_multi_query and settings.MULTI_QUERY_ENABLED and llm:

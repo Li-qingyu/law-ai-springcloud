@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # 检索优化开关
     RERANK_ENABLED: bool = True  #重排是否需要开启
     MULTI_QUERY_ENABLED: bool = True  #问题多路改写是否需要开启
+    HYBRID_SEARCH_ENABLED: bool = True  #混合检索（向量+BM25）是否开启
 
     # 语义缓存配置
     SEMANTIC_CACHE_ENABLED: bool = True
