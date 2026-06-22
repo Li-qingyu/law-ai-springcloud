@@ -170,8 +170,13 @@ async def _call_llm_summary(conversation_text: str, llm=None) -> dict:
     """调用 LLM 生成结构化摘要"""
     from langchain_community.chat_models import ChatTongyi
     from app.core.config import get_settings
+    from app.memory.privacy_manager import PrivacyManager
 
     settings = get_settings()
+
+    # 隐私脱敏：发送 LLM 前对对话文本做 PII 替换
+    pm = PrivacyManager()
+    safe_text = pm.desensitize_for_llm(conversation_text)
 
     # 使用小模型降低延迟和费用
     if llm is None:
@@ -180,7 +185,7 @@ async def _call_llm_summary(conversation_text: str, llm=None) -> dict:
             model="qwen-turbo",
         )
 
-    prompt = SUMMARY_PROMPT.format(conversation_text=conversation_text)
+    prompt = SUMMARY_PROMPT.format(conversation_text=safe_text)
 
     try:
         import asyncio
@@ -298,3 +303,27 @@ def _merge_special_terms(old: str, new: str) -> str:
     if new in old:
         return old
     return f"{old}；{new}"
+
+if __name__ == '__main__':
+    test1="""
+    "question": "能再给出我详细一点的解决？",
+                "turn_number": 2,
+                "session_id": "lease-dispute-001",
+                "user_id": 456,
+                "conversation_history": [
+                    {
+                        "role": "user",
+                        "content": "我租的房子合同还没到期房东说要卖房让我提前搬走，还以'卫生没打扫干净'为由扣了我全部押金。这合法吗？，我的电话是18715555555，身份证号是140105200103110111",
+                        "timestamp": "2026-04-18T09:00:00Z"
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "根据《民法典》第725条'买卖不破租赁'原则，房东卖房不影响你的租赁合同效力，他无权强制你提前搬离。至于押金，如果合同未明确约定'卫生标准'作为扣款条件，且你已尽到一般清洁义务，房东无权全额扣押。建议你先保留租赁合同、押金收据、房屋交接时的照片/视频等证据。",
+                        "timestamp": "2026-04-18T09:00:08Z"
+                    }
+                ]
+    """
+    import asyncio
+
+    result = asyncio.run(_call_llm_summary(conversation_text=test1))
+    print(result)

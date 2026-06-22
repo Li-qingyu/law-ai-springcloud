@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     MEMORY_COMPRESS_THRESHOLD: int = 5          # 累积 N 轮触发压缩
     MEMORY_DESENSITIZE_ENABLED: bool = True     # 隐私脱敏开关
 
+    # 长期记忆配置
+    MEMORY_LONG_TERM_ENABLED: bool = True       # 长期记忆开关
+    MEMORY_LONG_TERM_MIN_SCORE: float = 0.6     # 语义检索最低分数阈值
+    MEMORY_LONG_TERM_TOP_K: int = 3             # 语义检索返回数量
+
     # 语义缓存配置
     SEMANTIC_CACHE_ENABLED: bool = True
     SEMANTIC_CACHE_COLLECTION: str = "semantic_cache"

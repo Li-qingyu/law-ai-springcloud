@@ -68,6 +68,7 @@ from app.tools import create_search_tools
 from app.builders import data_card_builder
 from app.memory.working_memory import WorkingMemory, build_memory_header, extract_reference_anchor
 from app.memory.short_term_memory import ShortTermMemory
+from app.memory.long_term_memory import LongTermMemory
 from langchain_community.chat_models import ChatTongyi
 
 # ==================== 两阶段分离架构 ====================
@@ -339,14 +340,16 @@ def _build_minimal_context(conversation_history: list) -> str:
 
 
 
-async def pre_analyze(question: str, conversation_history: list) -> dict:
+async def pre_analyze(question: str, conversation_history: list,
+                      memory_context: str = "") -> dict:
     """
     轻量预分析：代词消解 + 意图分类
     - 无历史时：纯规则分类，不调用 LLM（< 10ms）
     - 有历史时：规则优先，LLM 兜底（0.5-1s）
+    - memory_context: 短期记忆摘要头，当 conversation_history 为空时作为上下文补充
     """
     import asyncio
-    has_history = bool(conversation_history)
+    has_history = bool(conversation_history) or bool(memory_context)
 
     # 1. 规则快速分类
     intent = _rule_classify(question, has_history)
@@ -362,10 +365,15 @@ async def pre_analyze(question: str, conversation_history: list) -> dict:
         api_key=settings.DASHSCOPE_API_KEY,
         model=settings.OPENAI_MODEL,
         top_p=0.7,
-        temperature=0.1,  # 低 temperature，保证输出稳定
     )
 
-    context = _build_minimal_context(conversation_history)
+    # 优先用 conversation_history，没有时用 memory_context
+    if conversation_history:
+        context = _build_minimal_context(conversation_history)
+    elif memory_context:
+        context = memory_context
+    else:
+        context = "无"
     prompt = PRE_ANALYZE_PROMPT.format(context=context, question=question)
 
     try:
@@ -475,19 +483,21 @@ async def consult(request: AiConsultRequest):
     question = request.question
     conversation_history = request.conversation_history or []
 
-    # 加载短期记忆，构建记忆上下文
+    # 加载短期记忆，构建记忆上下文（必须在 pre_analyze 之前，为意图识别提供上下文）
     stm = ShortTermMemory(request.session_id)
     short_term_summary = stm.get_summary()
     round_count = stm.get_round_count()
     memory_header = build_memory_header(short_term_summary, round_count) if short_term_summary else ""
 
-    history_data = build_history_messages(conversation_history)
-    chat_history_text = build_chat_history_text(conversation_history, memory_header)
+    # 短期记忆缺失时，查询长期记忆
+    long_term_context = ""
+    if not short_term_summary:
+        ltm = LongTermMemory()
+        long_term_context = ltm.recall(request.user_id, question, short_term_summary)
+        if long_term_context:
+            logging.info(f"[长期记忆] 命中跨会话历史: user_id={request.user_id}")
 
-    logging.info(f"原始问题: {question}")
-    logging.info(f"对话历史轮次: {len(conversation_history)}, 记忆轮次: {round_count}")
-
-    # 阶段 0: 语义缓存检查
+    # 阶段 0: 语义缓存检查（提前到 pre_analyze 之前，缓存命中直接返回）
     cache = SemanticCache()
     cached = cache.get(question)
     if cached and not cached.get("need_refresh"):
@@ -498,12 +508,22 @@ async def consult(request: AiConsultRequest):
             data_cards=[],
             session_id=request.session_id,
             user_id=request.user_id,
-            turn_number=len(history_data) // 2 + 1,
+            turn_number=round_count + 1,
             processing_time_ms=processing_time_ms,
         )
 
-    # 阶段 1: 轻量预分析
-    analysis = await pre_analyze(question, conversation_history)
+    # 阶段 1: 轻量预分析（传入 memory_header 作为上下文补充）
+    analysis = await pre_analyze(question, conversation_history, memory_header)
+
+    history_data = build_history_messages(conversation_history)
+    chat_history_text = build_chat_history_text(conversation_history, memory_header)
+
+    # 注入长期记忆到上下文前面
+    if long_term_context:
+        chat_history_text = long_term_context + "\n\n" + chat_history_text
+
+    logging.info(f"原始问题: {question}")
+    logging.info(f"对话历史轮次: {len(conversation_history)}, 记忆轮次: {round_count}")
     resolved_question = analysis["resolved_question"]
     intent = analysis["intent"]
     logging.info(f"[阶段1] 预分析完成: intent={intent}, resolved={resolved_question[:50]}")
@@ -654,17 +674,19 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
     question = request.question
     conversation_history = request.conversation_history or []
 
-    # 加载短期记忆，构建记忆上下文
+    # 加载短期记忆，构建记忆上下文（必须在 pre_analyze 之前，为意图识别提供上下文）
     stm = ShortTermMemory(request.session_id)
     short_term_summary = stm.get_summary()
     round_count = stm.get_round_count()
     memory_header = build_memory_header(short_term_summary, round_count) if short_term_summary else ""
 
-    history_data = build_history_messages(conversation_history)
-    chat_history_text = build_chat_history_text(conversation_history, memory_header)
-
-    logging.info(f"原始问题: {question}")
-    logging.info(f"对话历史轮次: {len(conversation_history)}, 记忆轮次: {round_count}")
+    # 短期记忆缺失时，查询长期记忆
+    long_term_context = ""
+    if not short_term_summary:
+        ltm = LongTermMemory()
+        long_term_context = ltm.recall(request.user_id, question, short_term_summary)
+        if long_term_context:
+            logging.info(f"[长期记忆] 命中跨会话历史: user_id={request.user_id}")
 
     # ==================== 语义缓存检查 ====================
     cache = SemanticCache()
@@ -680,7 +702,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
             "data_cards": cached["data_cards"],
             "session_id": request.session_id,
             "user_id": request.user_id,
-            "turn_number": len(history_data) // 2 + 1,
+            "turn_number": round_count + 1,
             "processing_time_ms": total_time_ms,
         }
         yield f"data: {json.dumps(complete_data, ensure_ascii=False)}\n\n"
@@ -688,8 +710,16 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
 
     # ==================== 阶段 1: 轻量预分析 ====================
     yield _sse_event("status", "正在分析您的问题...")
-    analysis = await pre_analyze(question, conversation_history)
+    analysis = await pre_analyze(question, conversation_history, memory_header)
     resolved_question = analysis["resolved_question"]
+
+    # pre_analyze 完成后构建历史上下文（供后续阶段使用）
+    history_data = build_history_messages(conversation_history)
+    chat_history_text = build_chat_history_text(conversation_history, memory_header)
+    if long_term_context:
+        chat_history_text = long_term_context + "\n\n" + chat_history_text
+    logging.info(f"原始问题: {question}")
+    logging.info(f"对话历史轮次: {len(conversation_history)}, 记忆轮次: {round_count}")
     intent = analysis["intent"]
     logging.info(f"[阶段1] 预分析完成: intent={intent}, resolved={resolved_question[:50]}")
 

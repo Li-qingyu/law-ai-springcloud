@@ -5,6 +5,7 @@ from app.models.request import AiConsultRequest
 from app.models.response import AiConsultResponse, ClientState
 from app.repositories.milvus_client import init_milvus
 from app.services.agent_service import consult, consult_stream
+from app.services.semantic_cache import SemanticCache
 import logging
 
 # 创建路由器
@@ -74,3 +75,16 @@ async def ai_consult_stream(request: AiConsultRequest):
 async def health():
     # 检查服务是否正常
     return {"status": "ok"}
+
+
+@router.post("/cache/cleanup")
+async def cache_cleanup():
+    """手动触发语义缓存过期清理"""
+    try:
+        ensure_milvus_ready()
+        cache = SemanticCache()
+        deleted = cache.cleanup_expired()
+        return {"status": "success", "deleted": deleted}
+    except Exception as e:
+        logging.error(f"缓存清理失败: {e}")
+        return {"status": "error", "message": str(e), "deleted": 0}

@@ -201,3 +201,24 @@ class SemanticCache:
             logger.info(f"[semantic_cache] 失效 {len(ids)} 条缓存")
         except Exception as e:
             logger.error(f"[semantic_cache] 失效失败: {e}")
+
+    def cleanup_expired(self) -> int:
+        """删除超过 TTL 的缓存条目，返回删除数量"""
+        try:
+            collection = Collection(name=self.collection_name, using="law-ai")
+            collection.flush()
+            before_count = collection.num_entities
+
+            expire_at = int(time.time()) - CACHE_TTL_SECONDS
+            filter_expr = f"created_at < {expire_at}"
+            collection.delete(filter_expr)
+            collection.flush()
+
+            after_count = collection.num_entities
+            deleted = before_count - after_count
+            if deleted > 0:
+                logger.info(f"[cache_cleanup] 清理过期缓存 {deleted} 条")
+            return deleted
+        except Exception as e:
+            logger.error(f"[cache_cleanup] 清理失败: {e}")
+            return 0
