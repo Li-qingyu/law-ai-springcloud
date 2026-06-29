@@ -1,6 +1,7 @@
-from fastapi import  FastAPI
+from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.api.v1 import ai
+from app.api.v1 import admin
 from app.core.config import get_settings
 from app.services.semantic_cache import init_cache_collection, SemanticCache
 import logging
@@ -74,6 +75,7 @@ app = FastAPI(
 
 #注册路由
 app.include_router(ai.router)
+app.include_router(admin.router)
 
 
 # 根路径测试
