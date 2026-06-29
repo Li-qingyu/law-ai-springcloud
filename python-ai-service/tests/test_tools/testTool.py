@@ -1,6 +1,5 @@
 from app.repositories.milvus_client import init_milvus
-from app.tools import LawArticleSearchTool, LawCaseSearchTool, ConsultHistorySearchTool,base_search_tool
-
+from app.tools import LawArticleSearchTool, LawCaseSearchTool, ConsultHistorySearchTool
 
 if __name__ == '__main__':
     # 初始化 Milvus 连接

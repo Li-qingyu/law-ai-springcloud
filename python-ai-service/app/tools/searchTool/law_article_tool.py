@@ -1,8 +1,8 @@
 """法律条文搜索工具"""
 
-from app.tools.base_search_tool import BaseSearchTool
+from app.tools.searchTool.base_search_tool import BaseSearchTool
 from app.core.config import get_settings
-from typing import List,Dict,Any
+from typing import Any
 
 
 class LawArticleSearchTool(BaseSearchTool):

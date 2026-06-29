@@ -6,7 +6,7 @@ from typing import TypedDict, Annotated, Any, Dict, Optional
 import operator
 import logging
 from langgraph.graph import StateGraph, END
-from app.tools.permission_tool import PermissionTool
+from app.tools.adminTool.permission_tool import PermissionTool
 from app.services.admin_log_service import AdminLogService
 
 logger = logging.getLogger(__name__)

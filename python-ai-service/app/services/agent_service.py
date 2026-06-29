@@ -551,7 +551,7 @@ async def consult(request: AiConsultRequest):
         streaming=False,
     )
     retriever = build_retriever(intent, llm=llm)
-    from app.tools.base_search_tool import set_retriever
+    from app.tools.searchTool.base_search_tool import set_retriever
     set_retriever(retriever)
 
     if intent == "simple_query":
@@ -751,7 +751,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
         streaming=False,
     )
     retriever = build_retriever(intent, llm=llm)
-    from app.tools.base_search_tool import set_retriever
+    from app.tools.searchTool.base_search_tool import set_retriever
     set_retriever(retriever)
 
     if intent == "simple_query":

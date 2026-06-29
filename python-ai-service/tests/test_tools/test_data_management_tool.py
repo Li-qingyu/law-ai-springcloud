@@ -1,4 +1,4 @@
-from app.tools.data_management_tool import DataManagementTool
+from app.tools.adminTool.data_management_tool import DataManagementTool
 
 def test_patent_data_management():
     """测试专利数据管理"""

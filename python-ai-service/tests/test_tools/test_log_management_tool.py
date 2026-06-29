@@ -1,5 +1,4 @@
-import pytest
-from app.tools.log_management_tool import LogManagementTool
+from app.tools.adminTool.log_management_tool import LogManagementTool
 
 def test_system_log_query():
     """测试系统日志查询"""

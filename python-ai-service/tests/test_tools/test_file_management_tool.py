@@ -1,5 +1,4 @@
-import pytest
-from app.tools.file_management_tool import FileManagementTool
+from app.tools.adminTool.file_management_tool import FileManagementTool
 
 def test_file_upload():
     """测试文件上传"""

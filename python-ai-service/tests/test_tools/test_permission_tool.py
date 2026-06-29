@@ -1,4 +1,4 @@
-from app.tools.permission_tool import PermissionTool
+from app.tools.adminTool.permission_tool import PermissionTool
 
 def test_user_management():
     """测试用户管理"""
