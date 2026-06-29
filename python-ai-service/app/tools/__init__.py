@@ -9,6 +9,7 @@ from app.tools.consult_history_tool import ConsultHistorySearchTool
 from app.tools.file_management_tool import FileManagementTool
 from app.tools.log_management_tool import LogManagementTool
 from app.tools.data_management_tool import DataManagementTool
+from app.tools.permission_tool import PermissionTool
 
 
 def create_search_tools():
@@ -29,5 +30,6 @@ __all__ = [
     "FileManagementTool",
     "LogManagementTool",
     "DataManagementTool",
+    "PermissionTool",
     "create_search_tools"
 ]
