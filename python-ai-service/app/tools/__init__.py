@@ -6,6 +6,7 @@ from app.tools.base_search_tool import BaseSearchTool, SearchInput
 from app.tools.law_article_tool import LawArticleSearchTool
 from app.tools.law_case_tool import LawCaseSearchTool
 from app.tools.consult_history_tool import ConsultHistorySearchTool
+from app.tools.file_management_tool import FileManagementTool
 
 
 def create_search_tools():
@@ -23,5 +24,6 @@ __all__ = [
     "LawArticleSearchTool",
     "LawCaseSearchTool",
     "ConsultHistorySearchTool",
+    "FileManagementTool",
     "create_search_tools"
 ]
