@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class ReviewIssue(BaseModel):
     """审查问题模型"""
@@ -19,5 +19,4 @@ class ReviewResult(BaseModel):
     requires_manual_review: bool = Field(False, description="是否需要人工审查")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

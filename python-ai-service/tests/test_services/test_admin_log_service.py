@@ -1,4 +1,3 @@
-import pytest
 from app.services.admin_log_service import AdminLogService
 
 def test_create_log():
@@ -75,3 +74,32 @@ def test_get_logs_by_agent_type():
     
     logs = service.get_logs_by_agent_type("file_management")
     assert len(logs) == 2
+
+def test_get_logs_by_status():
+    """测试获取指定状态的操作日志"""
+    service = AdminLogService()
+    
+    service.create_log({"user_id": 123, "task_type": "file_management"})
+    task_id2 = service.create_log({"user_id": 456, "task_type": "log_management"})
+    service.update_log(task_id2, {"status": "success", "result": "done"})
+    
+    logs = service.get_logs_by_status("running")
+    assert len(logs) == 1
+    
+    logs = service.get_logs_by_status("success")
+    assert len(logs) == 1
+
+def test_duration_ms_calculation():
+    """测试执行时长计算"""
+    import time
+    service = AdminLogService()
+    
+    task_id = service.create_log({"user_id": 123, "task_type": "file_management"})
+    time.sleep(0.01)  # Small delay to ensure duration > 0
+    
+    service.update_log(task_id, {"status": "success", "result": "done"})
+    
+    log = service.get_log(task_id)
+    assert log.duration_ms is not None
+    assert isinstance(log.duration_ms, int)
+    assert log.duration_ms >= 0
