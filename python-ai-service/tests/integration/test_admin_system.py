@@ -118,26 +118,3 @@ def test_multiple_tasks():
     # 验证日志记录
     logs = log_service.get_logs_by_user(123)
     assert len(logs) == 4
-
-def test_review_agent_integration():
-    """测试审查Agent集成"""
-    log_service = AdminLogService()
-    agent = create_admin_router_agent(log_service)
-
-    # 执行一个任务
-    result = agent.invoke({
-        "query": "上传文件 patent_data.xlsx",
-        "user_id": 123,
-        "user_role": "super_admin"
-    })
-
-    assert result is not None
-    assert "result" in result
-
-    # 验证审查结果已记录
-    logs = log_service.get_logs_by_user(123)
-    assert len(logs) > 0
-
-    # 检查是否有审查记录
-    reviewed_logs = log_service.get_logs_by_status("reviewed")
-    assert len(reviewed_logs) > 0

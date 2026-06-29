@@ -8,13 +8,11 @@ from app.agents.file_management_agent import create_file_management_agent
 from app.agents.log_management_agent import create_log_management_agent
 from app.agents.data_management_agent import create_data_management_agent
 from app.agents.permission_management_agent import create_permission_management_agent
-from app.agents.review_agent import create_review_agent
 
 __all__ = [
     "create_admin_router_agent",
     "create_file_management_agent",
     "create_log_management_agent",
     "create_data_management_agent",
-    "create_permission_management_agent",
-    "create_review_agent"
+    "create_permission_management_agent"
 ]

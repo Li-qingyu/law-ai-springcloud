@@ -10,7 +10,6 @@ from app.agents.file_management_agent import create_file_management_agent
 from app.agents.log_management_agent import create_log_management_agent
 from app.agents.data_management_agent import create_data_management_agent
 from app.agents.permission_management_agent import create_permission_management_agent
-from app.agents.review_agent import create_review_agent
 from app.services.admin_log_service import AdminLogService
 
 logger = logging.getLogger(__name__)
@@ -125,7 +124,6 @@ def create_admin_router_agent(log_service: Optional[AdminLogService] = None):
     workflow.add_node("log_management", create_log_management_agent(log_service))
     workflow.add_node("data_management", create_data_management_agent(log_service))
     workflow.add_node("permission_management", create_permission_management_agent(log_service))
-    workflow.add_node("review", create_review_agent(log_service=log_service))
 
     # 设置入口
     workflow.set_entry_point("classify_task")
@@ -133,7 +131,7 @@ def create_admin_router_agent(log_service: Optional[AdminLogService] = None):
     # 添加边
     workflow.add_edge("classify_task", "check_permission")
 
-    # 添加条件边
+    # 添加条件边 - 子Agent执行完后直接结束
     workflow.add_conditional_edges(
         "check_permission",
         route_to_sub_agent,
@@ -146,13 +144,10 @@ def create_admin_router_agent(log_service: Optional[AdminLogService] = None):
         }
     )
 
-    # 所有子Agent执行完后都到审查Agent
-    workflow.add_edge("file_management", "review")
-    workflow.add_edge("log_management", "review")
-    workflow.add_edge("data_management", "review")
-    workflow.add_edge("permission_management", "review")
-
-    # 审查Agent执行完后结束
-    workflow.add_edge("review", END)
+    # 所有子Agent执行完后直接结束
+    workflow.add_edge("file_management", END)
+    workflow.add_edge("log_management", END)
+    workflow.add_edge("data_management", END)
+    workflow.add_edge("permission_management", END)
 
     return workflow.compile()
