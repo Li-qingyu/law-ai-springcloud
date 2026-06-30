@@ -18,6 +18,7 @@ class IntentType(Enum):
     LOG_MANAGEMENT = "log_management"
     DATA_MANAGEMENT = "data_management"
     PERMISSION_MANAGEMENT = "permission_management"
+    HELP = "help"
     UNKNOWN = "unknown"
 
 
@@ -54,12 +55,20 @@ class IntentClassifier:
             (r"角色.*管理|管理.*角色", 0.90),
             (r"用户|权限|角色", 0.85),
         ],
+        IntentType.HELP: [
+            (r"帮助|帮忙|有什么功能|能做什么|怎么用|使用说明", 0.95),
+            (r"功能介绍|操作指南|使用帮助", 0.90),
+            (r"帮助|help", 0.85),
+        ],
         IntentType.FILE_MANAGEMENT: [
             (r"上传.*文件|文件.*上传", 0.95),
             (r"导入.*文件|文件.*导入", 0.95),
             (r"解析.*文件|文件.*解析", 0.95),
+            (r"查询.*文件|文件.*查询|查看.*文件|文件.*查看", 0.95),
+            (r"删除.*文件|文件.*删除", 0.95),
+            (r"所有文件|全部文件|文件列表", 0.90),
             (r"批量.*导入|导入.*批量", 0.90),
-            (r"上传|导入", 0.85),
+            (r"上传|导入|文件", 0.85),
         ],
         IntentType.LOG_MANAGEMENT: [
             (r"查询.*日志|日志.*查询", 0.95),
@@ -70,15 +79,37 @@ class IntentClassifier:
             (r"日志|统计|分析", 0.80),
         ],
         IntentType.DATA_MANAGEMENT: [
-            (r"专利.*数据|数据.*专利", 0.95),
-            (r"公司.*数据|数据.*公司", 0.95),
-            (r"诉讼.*数据|数据.*诉讼", 0.95),
-            (r"法律.*数据|数据.*法律", 0.95),
+            # 法律条文相关
+            (r"法律条文|法条|条文", 0.95),
+            (r"查询.*条文|条文.*查询", 0.95),
+            (r"新增.*条文|添加.*条文|条文.*新增", 0.95),
+            (r"修改.*条文|更新.*条文|条文.*修改", 0.95),
+            (r"删除.*条文|条文.*删除", 0.95),
+            (r"同步.*条文|条文.*同步|条文.*向量", 0.95),
+            # 法律案例相关
+            (r"法律案例|案例", 0.95),
+            (r"查询.*案例|案例.*查询", 0.95),
+            (r"新增.*案例|添加.*案例|案例.*新增", 0.95),
+            (r"修改.*案例|更新.*案例|案例.*修改", 0.95),
+            (r"删除.*案例|案例.*删除", 0.95),
+            (r"同步.*案例|案例.*同步|案例.*向量", 0.95),
+            # 法律书籍相关
+            (r"法律书籍|法律书|书籍", 0.95),
+            (r"查询.*书籍|书籍.*查询", 0.95),
+            (r"新增.*书籍|添加.*书籍|书籍.*新增", 0.95),
+            (r"修改.*书籍|更新.*书籍|书籍.*修改", 0.95),
+            (r"删除.*书籍|书籍.*删除", 0.95),
+            # 法律类型相关
+            (r"法律类型|法条类型|类型", 0.95),
+            (r"查询.*类型|类型.*查询", 0.95),
+            (r"新增.*类型|添加.*类型|类型.*新增", 0.95),
+            (r"修改.*类型|更新.*类型|类型.*修改", 0.95),
+            (r"删除.*类型|类型.*删除", 0.95),
+            # 通用数据管理
             (r"增删改查|数据.*管理|管理.*数据", 0.90),
-            (r"修改.*记录|记录.*修改", 0.85),
-            (r"删除.*记录|记录.*删除", 0.85),
-            (r"添加.*记录|记录.*添加", 0.85),
-            (r"数据|专利|公司|诉讼|法律", 0.80),
+            (r"同步.*数据|数据.*同步|同步.*向量库", 0.90),
+            (r"统计.*数量|数量.*统计", 0.85),
+            (r"数据|法律", 0.75),
         ],
     }
     
@@ -166,19 +197,22 @@ class IntentClassifier:
     def _llm_classify(self, query: str, context: Dict = None) -> IntentResult:
         """
         LLM识别
-        
+
         Args:
             query: 用户输入
             context: 上下文信息
-            
+
         Returns:
             意图识别结果
         """
         prompt = self._build_classify_prompt(query, context)
-        
+
         # 调用LLM
-        result = self.llm_service.invoke(prompt)
-        
+        response = self.llm_service.invoke(prompt)
+
+        # 兼容 LangChain 消息对象和纯字符串
+        result = response.content if hasattr(response, "content") else str(response)
+
         # 解析结果
         return self._parse_llm_result(result)
     
@@ -197,16 +231,24 @@ class IntentClassifier:
         if context:
             context_str = f"\n上下文信息：{json.dumps(context, ensure_ascii=False)}"
         
-        return f"""你是一个意图识别专家。请分析以下管理任务请求，识别其意图类型。
+        return f"""你是一个法律咨询管理后台的意图识别专家。请分析以下管理员的操作请求，识别其意图类型。
+
+系统背景：这是一个法律咨询管理后台，主要功能包括管理法律条文、法律案例、法律书籍、法律类型等数据，以及文件上传解析、日志查询、权限管理等。
 
 请求：{query}{context_str}
 
 请从以下意图类型中选择最匹配的一个：
-- file_management: 文件管理（上传、导入、解析文件等）
-- log_management: 日志管理（查询、统计、分析日志等）
-- data_management: 数据管理（管理专利、公司、诉讼、法律数据等）
-- permission_management: 权限管理（用户、角色、权限管理等）
+- file_management: 文件管理（上传文件、导入文件、解析文件、删除已上传的文件等，强调对物理文件本身的操作）
+- log_management: 日志管理（查询操作日志、统计分析、查看操作记录等）
+- data_management: 数据管理（管理法律条文、案例、书籍、类型等业务数据的增删改查和同步，这是系统的核心功能）
+- permission_management: 权限管理（用户、角色、权限的增删改查）
 - unknown: 无法识别
+
+判断规则：
+1. "资料""数据""条文""案例""书籍""内容"等通常指业务数据 → data_management
+2. 没有明确上下文时的模糊删除/修改操作，默认指业务数据操作 → data_management
+3. 只有明确提到"文件""上传""附件""导入文件"等才归为 file_management
+4. "记录""日志""操作历史"等 → log_management
 
 请以JSON格式返回结果：
 {{
@@ -315,18 +357,47 @@ JSON:"""
         if file_match:
             entities['file_name'] = file_match.group(1)
         
-        # 提取数据类型
-        data_types = ['专利', '公司', '诉讼', '法律']
-        for dt in data_types:
-            if dt in query:
-                entities['data_type'] = dt
+        # 提取数据类型 - 映射到Java API的数据类型
+        # 更具体的关键词放在前面，避免"法条"先于"法条类型"被匹配
+        data_type_mapping = {
+            '法条类型': 'law_type',
+            '法律类型': 'law_type',
+            '法律条文': 'law_article',
+            '法律案例': 'law_case',
+            '法律书籍': 'law_book',
+            '法律书': 'law_book',
+            '类型': 'law_type',
+            '条文': 'law_article',
+            '法条': 'law_article',
+            '案例': 'law_case',
+            '书籍': 'law_book',
+        }
+        for keyword, data_type in data_type_mapping.items():
+            if keyword in query:
+                entities['data_type'] = data_type
                 break
-        
-        # 提取操作类型
-        operations = ['上传', '导入', '查询', '统计', '管理', '删除', '修改', '添加']
-        for op in operations:
-            if op in query:
-                entities['operation'] = op
+
+        # 提取操作类型 - 映射到Java API的操作
+        operation_mapping = {
+            '查询': 'query',
+            '查看': 'query',
+            '搜索': 'query',
+            '新增': 'create',
+            '添加': 'create',
+            '创建': 'create',
+            '修改': 'update',
+            '更新': 'update',
+            '编辑': 'update',
+            '删除': 'delete',
+            '移除': 'delete',
+            '同步': 'sync',
+            '导入': 'import',
+            '统计': 'count',
+            '数量': 'count',
+        }
+        for keyword, operation in operation_mapping.items():
+            if keyword in query:
+                entities['operation'] = operation
                 break
         
         return entities

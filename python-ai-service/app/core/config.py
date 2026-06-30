@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     EMBEDDING_DIMENSION:int= 1024
     DEEPSEEK_API_KEY: str
     DEEPSEEK_MODEL:str
+    DEEPSEEK_API_BASE_URL:str
 
     #配置Milvus
     MILVUS_HOST: str = "localhost"
@@ -46,6 +47,11 @@ class Settings(BaseSettings):
     RERANK_ENABLED: bool = True  #重排是否需要开启
     MULTI_QUERY_ENABLED: bool = True  #问题多路改写是否需要开启
     HYBRID_SEARCH_ENABLED: bool = True  #混合检索（向量+BM25）是否开启
+
+    # Java API 配置
+    JAVA_API_BASE_URL: str = "http://localhost:80"
+    JAVA_API_TIMEOUT: int = 30
+    JAVA_API_RETRY_COUNT: int = 3
 
     # 对话记忆管理配置
     MEMORY_WORKING_MAX_TURNS: int = 3          # 工作记忆保留轮数
