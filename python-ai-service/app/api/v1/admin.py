@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
-from app.agents.admin_router_agent import create_admin_router_agent
+
+from app.agents.workflow import create_workflow
 from app.services.admin_log_service import AdminLogService
 
 router = APIRouter(prefix="/admin", tags=["管理员"])
@@ -24,9 +25,9 @@ async def manage(request: AdminRequest):
     """统一管理接口"""
     try:
         log_service = AdminLogService()
-        agent = create_admin_router_agent(log_service)
+        workflow = create_workflow(request,log_service=log_service)
 
-        result = agent.invoke({
+        result = workflow.invoke({
             "query": request.query,
             "user_id": request.user_id,
             "user_role": request.user_role,

@@ -2,30 +2,18 @@
 管理员路由Agent
 接收请求，识别意图，路由到相应子Agent
 """
-from typing import TypedDict, Annotated, Any, Dict, Optional
-import operator
 import logging
-from langgraph.graph import StateGraph, END
-from app.agents.file_management_agent import create_file_management_agent
-from app.agents.log_management_agent import create_log_management_agent
-from app.agents.data_management_agent import create_data_management_agent
-from app.agents.permission_management_agent import create_permission_management_agent
+from typing import Any, Dict, Optional
+
+from langgraph.graph import END
+
+from app.agents.state.AdminRouterState import AdminRouterState
 from app.services.admin_log_service import AdminLogService
 
 logger = logging.getLogger(__name__)
 
-class AdminRouterState(TypedDict):
-    """管理员路由Agent状态"""
-    query: str
-    user_id: str
-    user_role: str
-    task_type: str
-    task_params: dict
-    result: str
-    log_id: str
-    messages: Annotated[list, operator.add]
 
-def create_classify_node(log_service: Optional[AdminLogService] = None):
+def create_classify_node(log_service: Optional[AdminLogService] = None,):
     """创建分类节点，支持依赖注入"""
     def classify_admin_task(state: AdminRouterState) -> Dict[str, Any]:
         """分类管理任务"""
@@ -113,41 +101,3 @@ def route_to_sub_agent(state: AdminRouterState) -> str:
     else:
         return END
 
-def create_admin_router_agent(log_service: Optional[AdminLogService] = None):
-    """创建管理员路由Agent"""
-    workflow = StateGraph(AdminRouterState)
-
-    # 添加节点
-    workflow.add_node("classify_task", create_classify_node(log_service))
-    workflow.add_node("check_permission", create_check_permission_node(log_service))
-    workflow.add_node("file_management", create_file_management_agent(log_service))
-    workflow.add_node("log_management", create_log_management_agent(log_service))
-    workflow.add_node("data_management", create_data_management_agent(log_service))
-    workflow.add_node("permission_management", create_permission_management_agent(log_service))
-
-    # 设置入口
-    workflow.set_entry_point("classify_task")
-
-    # 添加边
-    workflow.add_edge("classify_task", "check_permission")
-
-    # 添加条件边 - 子Agent执行完后直接结束
-    workflow.add_conditional_edges(
-        "check_permission",
-        route_to_sub_agent,
-        {
-            "file_management": "file_management",
-            "log_management": "log_management",
-            "data_management": "data_management",
-            "permission_management": "permission_management",
-            END: END
-        }
-    )
-
-    # 所有子Agent执行完后直接结束
-    workflow.add_edge("file_management", END)
-    workflow.add_edge("log_management", END)
-    workflow.add_edge("data_management", END)
-    workflow.add_edge("permission_management", END)
-
-    return workflow.compile()

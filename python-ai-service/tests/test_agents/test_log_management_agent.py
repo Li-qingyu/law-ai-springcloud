@@ -1,4 +1,4 @@
-from app.agents.log_management_agent import create_log_management_agent
+from app.agents.agents.log_management_agent import create_log_management_agent
 from app.services.admin_log_service import AdminLogService
 
 def test_log_management_agent_system_log():

@@ -1,4 +1,4 @@
-from app.agents.permission_management_agent import create_permission_management_agent
+from app.agents.agents.permission_management_agent import create_permission_management_agent
 from app.services.admin_log_service import AdminLogService
 
 def test_permission_management_agent_user():

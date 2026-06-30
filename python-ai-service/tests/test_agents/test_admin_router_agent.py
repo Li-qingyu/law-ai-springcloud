@@ -1,4 +1,4 @@
-from app.agents.admin_router_agent import create_admin_router_agent
+from app.agents.agents.admin_router_agent import create_admin_router_agent
 from app.services.admin_log_service import AdminLogService
 
 def test_admin_router_agent_file_management():

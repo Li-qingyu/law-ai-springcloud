@@ -1,4 +1,4 @@
-from app.agents.data_management_agent import create_data_management_agent
+from app.agents.agents.data_management_agent import create_data_management_agent
 from app.services.admin_log_service import AdminLogService
 
 def test_data_management_agent_patent():

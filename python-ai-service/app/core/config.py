@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str="qwen3.5-plus"
     EMBEDDING_MODEL:str="text-embedding-v3"
     EMBEDDING_DIMENSION:int= 1024
+    DEEPSEEK_API_KEY: str
+    DEEPSEEK_MODEL:str
 
     #配置Milvus
     MILVUS_HOST: str = "localhost"

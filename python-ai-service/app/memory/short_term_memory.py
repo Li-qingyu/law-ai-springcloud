@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from app.core.config import get_settings
-from app.memory.redis_client import get_redis
+from app.repositories.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-from app.agents.file_management_agent import create_file_management_agent
+from app.agents.agents.file_management_agent import create_file_management_agent
 from app.services.admin_log_service import AdminLogService
 
 def test_file_management_agent():
