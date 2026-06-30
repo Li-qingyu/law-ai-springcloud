@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from langgraph.graph import END
 
 from app.agents.state.AdminRouterState import AdminRouterState
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 logger = logging.getLogger(__name__)
 

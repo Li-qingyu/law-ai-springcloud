@@ -3,7 +3,7 @@
 测试完整的工作流程
 """
 from app.agents.agents.admin_router_agent import create_admin_router_agent
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 def test_full_workflow_file_management():
     """测试完整的文件管理工作流程"""

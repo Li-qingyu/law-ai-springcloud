@@ -2,8 +2,7 @@
 模型降级管理器测试
 """
 import pytest
-import asyncio
-from app.services.model_fallback_manager import (
+from app.services.admin_agent_service.model_fallback_manager import (
     ModelFallbackManager, 
     SyncModelFallbackManager, 
     ModelConfig

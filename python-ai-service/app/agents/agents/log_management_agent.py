@@ -8,7 +8,7 @@ import operator
 import logging
 from langgraph.graph import StateGraph, END
 from app.tools.adminTool.log_management_tool import LogManagementTool
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 logger = logging.getLogger(__name__)
 

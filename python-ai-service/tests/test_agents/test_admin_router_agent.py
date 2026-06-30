@@ -1,5 +1,5 @@
 from app.agents.agents.admin_router_agent import create_admin_router_agent
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 def test_admin_router_agent_file_management():
     """测试统一入口Agent路由到文件管理"""

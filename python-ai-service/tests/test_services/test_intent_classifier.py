@@ -2,7 +2,7 @@
 意图识别器测试
 """
 import pytest
-from app.services.intent_classifier import IntentClassifier, IntentType, IntentResult
+from app.services.admin_agent_service.intent_classifier import IntentClassifier, IntentType, IntentResult
 
 
 class TestIntentClassifier:

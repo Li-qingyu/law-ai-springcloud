@@ -1,5 +1,5 @@
 from app.agents.agents.file_management_agent import create_file_management_agent
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 def test_file_management_agent():
     """测试文件管理Agent - 上传操作"""

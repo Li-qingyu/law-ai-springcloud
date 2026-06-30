@@ -3,7 +3,7 @@
 处理文件上传、解析和批量导入操作
 """
 import os
-from typing import Annotated, Any, Dict, Optional, Literal,TypedDict
+from typing import Annotated, Optional, Literal,TypedDict
 import operator
 import logging
 
@@ -14,7 +14,7 @@ from langchain_deepseek import ChatDeepSeek
 from langgraph.types import Command
 from langgraph.graph import StateGraph, END
 from app.tools.adminTool.file_management_tool import FileManagementTool
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)

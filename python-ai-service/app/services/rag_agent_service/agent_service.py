@@ -2,14 +2,13 @@ import json
 import logging
 import re
 import time
-from typing import List, Tuple, AsyncGenerator, Generator
-from dateutil import parser
+from typing import List, AsyncGenerator
 from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from app.builders.data_card_builder import DataCardBuilder
-from app.core.config import get_settings, Settings
+from app.core.config import get_settings
 
 # 检索优化模块
 from app.retrieval.retriever import Retriever
@@ -59,13 +58,12 @@ def _patched_subtract_client_response(self, resp, prev_resp):
 
 
 _ChatTongyi.subtract_client_response = _patched_subtract_client_response
-from app.models.request import AiConsultRequest, ConversationHistoryMessage
+from app.models.request import AiConsultRequest
 from app.models.response import AiConsultResponse
 from app.repositories.milvus_client import init_milvus
-from app.services.parallel_search import parallel_search_all_sync, build_tool_context_from_results
-from app.services.semantic_cache import SemanticCache
+from app.services.rag_agent_service.parallel_search import parallel_search_all_sync, build_tool_context_from_results
+from app.services.rag_agent_service.semantic_cache import SemanticCache
 from app.tools import create_search_tools
-from app.builders import data_card_builder
 from app.memory.working_memory import WorkingMemory, build_memory_header, extract_reference_anchor
 from app.memory.short_term_memory import ShortTermMemory
 from app.memory.long_term_memory import LongTermMemory

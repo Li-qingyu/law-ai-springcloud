@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from app.api.v1 import ai
 from app.api.v1 import admin
 from app.core.config import get_settings
-from app.services.semantic_cache import init_cache_collection, SemanticCache
+from app.services.rag_agent_service.semantic_cache import init_cache_collection, SemanticCache
 import logging
 import sys
 import uvicorn

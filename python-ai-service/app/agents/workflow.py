@@ -7,7 +7,7 @@ from app.agents.state.AdminRouterState import AdminRouterState
 from app.api.v1.admin import AdminRequest
 from typing import Optional
 
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 
 def create_workflow(request: AdminRequest,log_service: Optional[AdminLogService] = None):

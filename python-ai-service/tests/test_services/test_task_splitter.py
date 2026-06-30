@@ -2,7 +2,7 @@
 任务拆分器测试
 """
 import pytest
-from app.services.task_splitter import TaskSplitter, SubTask
+from app.services.admin_agent_service.task_splitter import TaskSplitter, SubTask
 
 
 class TestTaskSplitter:

@@ -1,5 +1,5 @@
 from app.agents.agents.permission_management_agent import create_permission_management_agent
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 def test_permission_management_agent_user():
     """测试权限管理Agent - 用户管理"""

@@ -1,5 +1,5 @@
 from app.agents.agents.log_management_agent import create_log_management_agent
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 def test_log_management_agent_system_log():
     """测试日志管理Agent - 系统日志查询"""

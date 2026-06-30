@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
 from app.agents.workflow import create_workflow
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 router = APIRouter(prefix="/admin", tags=["管理员"])
 

@@ -1,11 +1,10 @@
 from fastapi import  APIRouter
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from app.models.request import AiConsultRequest
-from app.models.response import AiConsultResponse, ClientState
+from app.models.response import ClientState
 from app.repositories.milvus_client import init_milvus
-from app.services.agent_service import consult, consult_stream
-from app.services.semantic_cache import SemanticCache
+from app.services.rag_agent_service.agent_service import consult, consult_stream
+from app.services.rag_agent_service.semantic_cache import SemanticCache
 import logging
 
 # 创建路由器

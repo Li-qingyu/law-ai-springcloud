@@ -1,4 +1,4 @@
-from app.services.admin_log_service import AdminLogService
+from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 def test_create_log():
     """测试创建日志"""
