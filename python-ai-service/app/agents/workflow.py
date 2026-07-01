@@ -13,13 +13,12 @@ from app.agents.agents.admin_router_agent import (
     route_to_sub_agent,
 )
 from app.agents.state.AdminRouterState import AdminRouterState
-from app.api.v1.admin import AdminRequest
 from app.services.admin_agent_service.admin_log_service import AdminLogService
 
 logger = logging.getLogger(__name__)
 
 
-def create_workflow(request: AdminRequest, log_service: Optional[AdminLogService] = None):
+def create_workflow(request=None, log_service: Optional[AdminLogService] = None):
     """
     创建管理工作流
 

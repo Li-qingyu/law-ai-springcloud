@@ -1,6 +1,7 @@
 """
-意图识别器
-规则+LLM混合识别，提高准确性
+意图识别器 — 路由分类
+规则+LLM混合识别，仅判断意图类型（路由目标），不提取业务参数。
+业务参数由各子Agent自主识别。
 """
 import re
 import json
@@ -218,20 +219,20 @@ class IntentClassifier:
     
     def _build_classify_prompt(self, query: str, context: Dict = None) -> str:
         """
-        构建LLM提示词
-        
+        构建LLM提示词 — 仅做路由分类，不提取业务参数
+
         Args:
             query: 用户输入
             context: 上下文信息
-            
+
         Returns:
             提示词
         """
         context_str = ""
         if context:
             context_str = f"\n上下文信息：{json.dumps(context, ensure_ascii=False)}"
-        
-        return f"""你是一个法律咨询管理后台的意图识别专家。请分析以下管理员的操作请求，识别其意图类型。
+
+        return f"""你是一个法律咨询管理后台的意图分类专家。请分析管理员的操作请求，判断应该交给哪个子系统处理。
 
 系统背景：这是一个法律咨询管理后台，主要功能包括管理法律条文、法律案例、法律书籍、法律类型等数据，以及文件上传解析、日志查询、权限管理等。
 
@@ -254,24 +255,22 @@ class IntentClassifier:
 {{
     "intent": "意图类型",
     "confidence": 0.95,
-    "entities": {{"关键实体": "值"}},
     "reasoning": "识别理由"
 }}
 
 注意：
 1. confidence 是 0-1 之间的浮点数，表示识别置信度
-2. entities 提取请求中的关键实体（如文件名、数据类型等）
-3. reasoning 简要说明识别理由
+2. 只需要判断意图类型，不需要提取具体参数
 
 JSON:"""
     
     def _parse_llm_result(self, result: str) -> IntentResult:
         """
         解析LLM结果
-        
+
         Args:
             result: LLM返回的结果
-            
+
         Returns:
             意图识别结果
         """
@@ -280,28 +279,26 @@ JSON:"""
             json_match = re.search(r'\{.*\}', result, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
-                
+
                 intent_str = data.get("intent", "unknown")
                 confidence = data.get("confidence", 0.5)
-                entities = data.get("entities", {})
-                reasoning = data.get("reasoning", "")
-                
+
                 # 转换意图类型
                 try:
                     intent = IntentType(intent_str)
                 except ValueError:
                     intent = IntentType.UNKNOWN
-                
+
                 return IntentResult(
                     intent=intent,
                     confidence=confidence,
-                    entities=entities,
+                    entities={},
                     source="llm",
                     raw_response=result
                 )
         except Exception as e:
             logger.error(f"解析LLM结果失败: {e}")
-        
+
         # 解析失败，返回默认结果
         return IntentResult(
             intent=IntentType.UNKNOWN,
@@ -311,15 +308,15 @@ JSON:"""
             raw_response=result
         )
     
-    def _merge_results(self, rule_result: IntentResult, 
+    def _merge_results(self, rule_result: IntentResult,
                        llm_result: IntentResult) -> IntentResult:
         """
         合并规则和LLM结果
-        
+
         Args:
             rule_result: 规则识别结果
             llm_result: LLM识别结果
-            
+
         Returns:
             合并后的结果
         """
@@ -329,78 +326,29 @@ JSON:"""
             return IntentResult(
                 intent=rule_result.intent,
                 confidence=merged_confidence,
-                entities={**rule_result.entities, **llm_result.entities},
+                entities={},
                 source="merged"
             )
-        
+
         # 如果LLM置信度更高，使用LLM结果
         if llm_result.confidence > rule_result.confidence:
             return llm_result
-        
+
         # 否则使用规则结果
         return rule_result
     
     def _extract_entities(self, query: str) -> Dict[str, str]:
         """
-        提取实体
-        
+        提取实体 — 仅用于辅助路由，不提取业务参数。
+        业务参数由各子Agent自主识别。
+
         Args:
             query: 用户输入
-            
-        Returns:
-            实体字典
-        """
-        entities = {}
-        
-        # 提取文件名（只匹配文件名部分，不包含前面的动词）
-        file_match = re.search(r'(?:上传|导入|解析)?\s*([\w\-\.]+\.(xlsx|csv|pdf|docx?))', query)
-        if file_match:
-            entities['file_name'] = file_match.group(1)
-        
-        # 提取数据类型 - 映射到Java API的数据类型
-        # 更具体的关键词放在前面，避免"法条"先于"法条类型"被匹配
-        data_type_mapping = {
-            '法条类型': 'law_type',
-            '法律类型': 'law_type',
-            '法律条文': 'law_article',
-            '法律案例': 'law_case',
-            '法律书籍': 'law_book',
-            '法律书': 'law_book',
-            '类型': 'law_type',
-            '条文': 'law_article',
-            '法条': 'law_article',
-            '案例': 'law_case',
-            '书籍': 'law_book',
-        }
-        for keyword, data_type in data_type_mapping.items():
-            if keyword in query:
-                entities['data_type'] = data_type
-                break
 
-        # 提取操作类型 - 映射到Java API的操作
-        operation_mapping = {
-            '查询': 'query',
-            '查看': 'query',
-            '搜索': 'query',
-            '新增': 'create',
-            '添加': 'create',
-            '创建': 'create',
-            '修改': 'update',
-            '更新': 'update',
-            '编辑': 'update',
-            '删除': 'delete',
-            '移除': 'delete',
-            '同步': 'sync',
-            '导入': 'import',
-            '统计': 'count',
-            '数量': 'count',
-        }
-        for keyword, operation in operation_mapping.items():
-            if keyword in query:
-                entities['operation'] = operation
-                break
-        
-        return entities
+        Returns:
+            实体字典（当前为空，保留接口以备扩展）
+        """
+        return {}
     
     def get_supported_intents(self) -> List[str]:
         """

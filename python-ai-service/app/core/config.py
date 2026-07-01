@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     HYBRID_SEARCH_ENABLED: bool = True  #混合检索（向量+BM25）是否开启
 
     # Java API 配置
-    JAVA_API_BASE_URL: str = "http://localhost:80"
+    JAVA_API_BASE_URL: str = "http://localhost:8082"
     JAVA_API_TIMEOUT: int = 30
     JAVA_API_RETRY_COUNT: int = 3
 

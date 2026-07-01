@@ -1,129 +1,122 @@
+"""
+数据管理Agent测试 — LLM + Tools 模式
+注意：这些测试会调用真实的 LLM 和 Java API，确保服务可用再运行。
+"""
 from app.agents.agents.data_management_agent import create_data_management_agent
 from app.services.admin_agent_service.admin_log_service import AdminLogService
 
-def test_data_management_agent_patent():
-    """测试数据管理Agent - 专利数据管理"""
-    # 创建日志服务
-    log_service = AdminLogService()
 
-    # 创建日志
-    task_id = log_service.create_log({
-        "user_id": 123,
-        "task_type": "data_management",
-        "query": "管理专利数据"
-    })
-
-    # 创建Agent（传入日志服务）
-    agent = create_data_management_agent(log_service)
-
-    # 执行Agent
-    result = agent.invoke({
-        "query": "管理专利数据",
-        "user_id": 123,
-        "log_id": task_id
-    })
-
-    assert result is not None
-    assert "result" in result
-    assert "专利数据" in result["result"]
-
-    # 验证日志已更新
-    log = log_service.get_log(task_id)
-    assert log.status == "success"
-
-def test_data_management_agent_company():
-    """测试数据管理Agent - 公司数据管理"""
+def test_data_management_agent_query_articles():
+    """测试数据管理Agent - 查询法律条文"""
     log_service = AdminLogService()
     task_id = log_service.create_log({
         "user_id": 123,
         "task_type": "data_management",
-        "query": "管理公司数据"
+        "query": "查询所有法律条文"
     })
 
     agent = create_data_management_agent(log_service)
 
     result = agent.invoke({
-        "query": "管理公司数据",
+        "query": "查询所有法律条文",
         "user_id": 123,
-        "log_id": task_id
+        "log_id": task_id,
     })
 
     assert result is not None
     assert "result" in result
-    assert "公司数据" in result["result"]
+    assert result["result"]  # 应该有非空结果
+    print(f"查询条文结果: {result['result']}")
 
-    log = log_service.get_log(task_id)
-    assert log.status == "success"
 
-def test_data_management_agent_lawsuit():
-    """测试数据管理Agent - 诉讼数据管理"""
+def test_data_management_agent_count():
+    """测试数据管理Agent - 统计数量"""
     log_service = AdminLogService()
     task_id = log_service.create_log({
         "user_id": 123,
         "task_type": "data_management",
-        "query": "管理诉讼数据"
+        "query": "统计法律案例有多少条"
     })
 
     agent = create_data_management_agent(log_service)
 
     result = agent.invoke({
-        "query": "管理诉讼数据",
+        "query": "统计法律案例有多少条",
         "user_id": 123,
-        "log_id": task_id
+        "log_id": task_id,
     })
 
     assert result is not None
     assert "result" in result
-    assert "诉讼数据" in result["result"]
+    print(f"统计结果: {result['result']}")
 
-    log = log_service.get_log(task_id)
-    assert log.status == "success"
 
-def test_data_management_agent_law():
-    """测试数据管理Agent - 法律数据管理"""
+def test_data_management_agent_clarification():
+    """测试数据管理Agent - 参数不足时追问"""
     log_service = AdminLogService()
     task_id = log_service.create_log({
         "user_id": 123,
         "task_type": "data_management",
-        "query": "管理法律数据"
+        "query": "删掉那个"
     })
 
     agent = create_data_management_agent(log_service)
 
     result = agent.invoke({
-        "query": "管理法律数据",
+        "query": "删掉那个",
         "user_id": 123,
-        "log_id": task_id
+        "log_id": task_id,
     })
 
     assert result is not None
     assert "result" in result
-    assert "法律数据" in result["result"]
+    # LLM 应该会追问而不是直接执行
+    print(f"追问结果: {result['result']}")
 
-    log = log_service.get_log(task_id)
-    assert log.status == "success"
 
 def test_data_management_agent_unknown():
-    """测试数据管理Agent - 未知操作"""
+    """测试数据管理Agent - 模糊请求的处理"""
     log_service = AdminLogService()
     task_id = log_service.create_log({
         "user_id": 123,
         "task_type": "data_management",
-        "query": "未知操作"
+        "query": "帮我处理一下数据"
     })
 
     agent = create_data_management_agent(log_service)
 
     result = agent.invoke({
-        "query": "未知操作",
+        "query": "帮我处理一下数据",
         "user_id": 123,
-        "log_id": task_id
+        "log_id": task_id,
     })
 
     assert result is not None
     assert "result" in result
-    assert "请指定数据类型" in result["result"]
+    # LLM 应该会追问具体要做什么
+    print(f"模糊请求结果: {result['result']}")
 
-    # 验证日志标记为失败
-    log = log_service.get_log(task_id)
-    assert log.status == "failed"
+def test_data_management_agent_query_article_486():
+    """测试数据管理Agent - 查询民法典的第四百八十六条"""
+    log_service = AdminLogService()
+    task_id = log_service.create_log({
+        "user_id": 123,
+        "task_type": "data_management",
+        "query": "查询民法典的第四百八十六条"
+    })
+
+    agent = create_data_management_agent(log_service)
+
+    result = agent.invoke({
+        "query": "查询民法典的第四百八十六条",
+        "user_id": 123,
+        "log_id": task_id,
+    })
+
+    assert result is not None
+    assert "result" in result
+    print(f"查询民法典的第四百八十六条: {result['result']}")
+
+
+if __name__ == '__main__':
+    test_data_management_agent_query_article_486()

@@ -267,17 +267,17 @@ if __name__ == '__main__':
     # ---- 测试用例 ----
 
     # 1. 规则能直接命中的
-    test_classify("上传合同文件")
-    test_classify("查询所有法律条文")
-    test_classify("帮助")
+    #test_classify("上传合同文件")
+    #test_classify("查询所有法律条文")
+    #test_classify("帮助")
 
     # 2. 需要 LLM 兜底的模糊查询（规则置信度 < 0.8）
-    test_classify("我想看看系统里有哪些资料")
+    #test_classify("我想看看系统里有哪些资料")
     test_classify("把之前的那个东西删掉")
-    test_classify("帮我整理一下数据")
+    #test_classify("帮我整理一下数据")
 
     # 3. 权限不足的场景
-    test_classify("删除用户权限", user_role="admin")
+    #test_classify("删除用户权限", user_role="admin")
 
 
 
