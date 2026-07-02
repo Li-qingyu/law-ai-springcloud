@@ -40,22 +40,22 @@ OPERATION_PARAMS = {
             "lawBookId": "所属书籍ID(Integer, 必填)",
             "articleTitle": "条文标题(String, 必填)",
             "content": "条文内容(String, 必填)",
+            "publishDate": "发布日期(String, 格式yyyy-MM-dd)",
+            "effectiveDate": "生效日期(String, 格式yyyy-MM-dd)",
         },
         "optional": {
             "bookTitle": "书籍标题(String)",
-            "publishDate": "发布日期(String, 格式yyyy-MM-dd)",
-            "effectiveDate": "生效日期(String, 格式yyyy-MM-dd)",
             "articleOrder": "条文排序(Integer)",
         },
     },
     ("law_article", "update"): {
         "required": {
             "id": "条文ID(Long, 必填)",
+            "articleTitle": "条文标题(String, 必填，更新时必须传入原标题或新标题)",
+            "content": "条文内容(String, 必填)",
         },
         "optional": {
             "lawBookId": "所属书籍ID(Integer)",
-            "articleTitle": "条文标题(String)",
-            "content": "条文内容(String)",
             "bookTitle": "书籍标题(String)",
             "publishDate": "发布日期(String, 格式yyyy-MM-dd)",
             "effectiveDate": "生效日期(String, 格式yyyy-MM-dd)",

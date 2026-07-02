@@ -141,7 +141,23 @@ class JavaApiClient:
                         params=params,
                         json=json_data,
                     )
-                    response.raise_for_status()
+                    if response.status_code >= 400:
+                        error_msg = f"HTTP {response.status_code}"
+                        try:
+                            error_body = response.json()
+                            if "msg" in error_body:
+                                error_msg = error_body["msg"]
+                            elif "message" in error_body:
+                                error_msg = error_body["message"]
+                            logger.error(f"Java API 错误: {response.status_code} - {error_body}")
+                        except Exception:
+                            error_msg = response.text or error_msg
+                            logger.error(f"Java API 错误: {response.status_code} - {response.text}")
+
+                        if attempt == self.retry_count - 1:
+                            return {"code": 0, "msg": error_msg}
+                        continue  # 重试
+
                     result = response.json()
                     logger.info(f"Java API 响应: {result}")
                     return result
@@ -188,11 +204,14 @@ class JavaApiClient:
         request_params = params or {}
         path_params = {}
 
-        # 提取路径参数
         if "{id}" in path and "id" in request_params:
             path_params["id"] = request_params.pop("id")
         if "{ids}" in path and "ids" in request_params:
-            path_params["ids"] = request_params.pop("ids")
+            ids_value = request_params.pop("ids")
+            if isinstance(ids_value, list):
+                path_params["ids"] = ",".join(str(x) for x in ids_value)
+            else:
+                path_params["ids"] = ids_value
 
         # 对于GET请求，剩余参数作为查询参数
         # 对于非GET请求，作为JSON请求体
@@ -265,10 +284,15 @@ class JavaApiClient:
         request_params = params or {}
         path_params = {}
 
+        # 提取路径参数
         if "{id}" in path and "id" in request_params:
             path_params["id"] = request_params.pop("id")
         if "{ids}" in path and "ids" in request_params:
-            path_params["ids"] = request_params.pop("ids")
+            ids_value = request_params.pop("ids")
+            if isinstance(ids_value, list):
+                path_params["ids"] = ",".join(str(x) for x in ids_value)
+            else:
+                path_params["ids"] = ids_value
 
         return self.request_sync(
             method=method,
