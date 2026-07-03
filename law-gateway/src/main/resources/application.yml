@@ -39,9 +39,10 @@ spring:
             - id: ai-service
               uri: lb://law-ai-service
               predicates:
-                - Path=/user/ai/**
+                - Path=/user/ai/**,/admin/ai/**
               filters:
                 - StripPrefix=0
+
 
             # 通用服务路由
             - id: common-service

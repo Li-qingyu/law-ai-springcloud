@@ -13,6 +13,8 @@ from app.agents.agents.log_management_agent import create_log_management_agent
 from app.agents.agents.data_management_agent import create_data_management_agent
 from app.agents.agents.permission_management_agent import create_permission_management_agent
 
+# workflow 模块的导入延迟到函数内部，避免循环引用（workflow.get_sub_agent 反向导入本模块）
+
 __all__ = [
     "create_classify_node",
     "create_check_permission_node",

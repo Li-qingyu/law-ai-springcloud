@@ -2,6 +2,7 @@
 数据管理Agent测试 — LLM + Tools 模式
 注意：这些测试会调用真实的 LLM 和 Java API，确保服务可用再运行。
 """
+import uuid
 from app.agents.agents.data_management_agent import create_data_management_agent
 from app.services.admin_agent_service.admin_log_service import AdminLogService
 from langgraph.types import Command
@@ -17,12 +18,13 @@ def test_data_management_agent_query_articles():
     })
 
     agent = create_data_management_agent(log_service)
+    config = {"configurable": {"thread_id": f"test-{uuid.uuid4().hex[:8]}"}}
 
     result = agent.invoke({
         "query": "查询所有法律条文",
         "user_id": 123,
         "log_id": task_id,
-    })
+    }, config=config)
 
     assert result is not None
     assert "result" in result
@@ -40,12 +42,13 @@ def test_data_management_agent_count():
     })
 
     agent = create_data_management_agent(log_service)
+    config = {"configurable": {"thread_id": f"test-{uuid.uuid4().hex[:8]}"}}
 
     result = agent.invoke({
         "query": "统计法律案例有多少条",
         "user_id": 123,
         "log_id": task_id,
-    })
+    }, config=config)
 
     assert result is not None
     assert "result" in result
@@ -53,7 +56,7 @@ def test_data_management_agent_count():
 
 
 def test_data_management_agent_clarification():
-    """测试数据管理Agent - 参数不足时追问"""
+    """测试数据管理Agent - 参数不足时追问（interrupt 模式）"""
     log_service = AdminLogService()
     task_id = log_service.create_log({
         "user_id": 123,
@@ -62,21 +65,28 @@ def test_data_management_agent_clarification():
     })
 
     agent = create_data_management_agent(log_service)
+    thread_id = f"test-clarify-{uuid.uuid4().hex[:8]}"
+    config = {"configurable": {"thread_id": thread_id}}
 
+    # 第一次调用：LLM 追问 → interrupt 暂停
     result = agent.invoke({
         "query": "删掉那个",
         "user_id": 123,
         "log_id": task_id,
-    })
+    }, config=config)
 
-    assert result is not None
-    assert "result" in result
-    # LLM 应该会追问而不是直接执行
-    print(f"追问结果: {result['result']}")
+    # 检查是否触发了 interrupt
+    if isinstance(result, dict) and '__interrupt__' in result:
+        interrupt_info = result['__interrupt__'][0].value
+        print(f"Agent 追问: {interrupt_info.get('question', '')}")
+        # 模拟用户补充信息
+        user_input = "劳动合同法第49条"
+        result = agent.invoke(Command(resume=user_input), config=config)
+    print(f"最终结果: {result.get('result', '')}")
 
 
 def test_data_management_agent_unknown():
-    """测试数据管理Agent - 模糊请求的处理"""
+    """测试数据管理Agent - 模糊请求的处理（interrupt 模式）"""
     log_service = AdminLogService()
     task_id = log_service.create_log({
         "user_id": 123,
@@ -85,16 +95,24 @@ def test_data_management_agent_unknown():
     })
 
     agent = create_data_management_agent(log_service)
+    thread_id = f"test-unknown-{uuid.uuid4().hex[:8]}"
+    config = {"configurable": {"thread_id": thread_id}}
 
     result = agent.invoke({
         "query": "帮我处理一下数据",
         "user_id": 123,
         "log_id": task_id,
-    })
+    }, config=config)
+
+    # 可能触发 interrupt 追问，也可能直接回复
+    if isinstance(result, dict) and '__interrupt__' in result:
+        interrupt_info = result['__interrupt__'][0].value
+        print(f"Agent 追问: {interrupt_info.get('question', '')}")
+        user_input = "我想查询所有法律条文"
+        result = agent.invoke(Command(resume=user_input), config=config)
 
     assert result is not None
     assert "result" in result
-    # LLM 应该会追问具体要做什么
     print(f"模糊请求结果: {result['result']}")
 
 def test_data_management_agent_query_article_486():
@@ -107,12 +125,13 @@ def test_data_management_agent_query_article_486():
     })
 
     agent = create_data_management_agent(log_service)
+    config = {"configurable": {"thread_id": f"test-{uuid.uuid4().hex[:8]}"}}
 
     result = agent.invoke({
         "query": "查询民法典的第四百八十六条",
         "user_id": 123,
         "log_id": task_id,
-    })
+    }, config=config)
 
     assert result is not None
     assert "result" in result
@@ -165,11 +184,12 @@ def test_data_management_agent_insert_article():
         "query": "插入一条法律条文,中华人民共和国劳动合同法的第四九条，内容如下： 用人单位违反本法规定解除或者终止劳动合同，劳动者要求继续履行劳动合同的，用人单位应当继续履行；劳动者不要求继续履行劳动合同或者劳动合同已经不能继续履行的，用人单位应当依照本法第八十七条规定支付赔偿金。"
     })
     agent = create_data_management_agent(log_service)
+    config = {"configurable": {"thread_id": f"test-{uuid.uuid4().hex[:8]}"}}
     result = agent.invoke({
         "query": "插入一条法律条文,中华人民共和国劳动合同法的第四九条，内容如下： 用人单位违反本法规定解除或者终止劳动合同，劳动者要求继续履行劳动合同的，用人单位应当继续履行；劳动者不要求继续履行劳动合同或者劳动合同已经不能继续履行的，用人单位应当依照本法第八十七条规定支付赔偿金。- 发布日期：2012-12-28- 生效日期：2013-07-01",
         "user_id": 123,
         "log_id": task_id,
-    })
+    }, config=config)
     assert result is not None
     assert "result" in result
     print(f"插入法律条文结果: {result['result']}")
@@ -185,11 +205,12 @@ def test_data_management_agent_update_article():
         "query": "更新法律条文,中华人民共和国劳动合同法的第四八条，内容如下：1111111111"
     })
     agent = create_data_management_agent(log_service)
+    config = {"configurable": {"thread_id": f"test-{uuid.uuid4().hex[:8]}"}}
     result = agent.invoke({
         "query": "更新法律条文,中华人民共和国劳动合同法的第四八条，内容如下：222222222222222",
         "user_id": 123,
         "log_id": task_id,
-    })
+    }, config=config)
     assert result is not None
     assert "result" in result
     print(f"更新法律条文结果: {result['result']}")
@@ -198,8 +219,8 @@ def test_data_management_agent_update_article():
 
 
 if __name__ == '__main__':
-    # test_data_management_agent_insert_article()
+    #test_data_management_agent_insert_article()
 
-    # test_data_management_agent_update_article()
-    test_data_management_agent_delete_article()
+    test_data_management_agent_update_article()
+    # test_data_management_agent_delete_article()
 

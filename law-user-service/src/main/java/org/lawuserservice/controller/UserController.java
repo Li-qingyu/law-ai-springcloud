@@ -40,6 +40,7 @@ public class UserController {
         LoginVO loginVO = userService.login(userLogin);
         Map<String,Object> claims=new HashMap<>();
         claims.put("userId", loginVO.getId());
+        claims.put("role", loginVO.getRole());
         String token = jwtUtil.createJWT(jwtProperties.getAdminSecretKey(), jwtProperties.getAdminTtl(), claims);
         loginVO.setToken(token);
         return Result.success(loginVO);

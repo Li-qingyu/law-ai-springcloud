@@ -12,6 +12,7 @@ class PermissionChecker:
     """权限检查器"""
 
     # 权限矩阵配置
+    # 角色说明: user=普通用户(无管理权限), super_admin=超级管理员, admin=普通管理员
     PERMISSION_MATRIX: Dict[str, Dict[str, List[str]]] = {
         "super_admin": {
             "file_management": ["upload", "parse", "import", "list", "delete"],
@@ -22,6 +23,12 @@ class PermissionChecker:
         "admin": {
             "file_management": ["upload", "parse", "list"],
             "data_management": ["query", "create", "update"],
+            "log_management": [],
+            "permission_management": [],
+        },
+        "user": {
+            "file_management": [],
+            "data_management": [],
             "log_management": [],
             "permission_management": [],
         },

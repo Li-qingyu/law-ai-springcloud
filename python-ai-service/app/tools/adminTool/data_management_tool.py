@@ -331,6 +331,8 @@ class DataManagementTool(BaseTool):
         params: Optional[dict] = None,
     ) -> str:
         """同步执行数据管理操作"""
+        logger.info(f"DataManagementTool._run 调用: operation={operation}, data_type={data_type}, params={params}")
+
         # 基础校验
         if data_type not in VALID_DATA_TYPES:
             return (
@@ -353,6 +355,8 @@ class DataManagementTool(BaseTool):
         logger.info(f"执行数据管理: operation={operation}, data_type={data_type}, params={params}")
 
         effective_params = self._prepare_params(operation, data_type, params)
+        logger.info(f"准备参数完成: effective_params={effective_params}")
+
         client = get_java_api_client()
 
         try:
@@ -361,9 +365,10 @@ class DataManagementTool(BaseTool):
                 data_type=data_type,
                 params=effective_params,
             )
+            logger.info(f"Java API 返回结果: {result}")
             return self._format_result(operation, data_type, result)
         except Exception as e:
-            logger.error(f"数据管理操作失败: {e}")
+            logger.error(f"数据管理操作失败: {e}", exc_info=True)
             return f"操作失败: {str(e)}"
 
     async def _arun(

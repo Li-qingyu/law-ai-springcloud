@@ -346,9 +346,36 @@ JSON:"""
             query: 用户输入
 
         Returns:
-            实体字典（当前为空，保留接口以备扩展）
+            实体字典，包含 operation 和 data_type（可能为空）
         """
-        return {}
+        entities = {}
+
+        # 提取 operation
+        operation_patterns = [
+            (r"查询|查看|统计|有多少|查询所有|查看所有|列出", "query"),
+            (r"新增|添加|插入|创建|新建", "create"),
+            (r"修改|更新|编辑|改动", "update"),
+            (r"删除|删掉|移除|去掉|清空", "delete"),
+            (r"同步|向量|导入", "sync"),
+        ]
+        for pattern, op in operation_patterns:
+            if re.search(pattern, query):
+                entities["operation"] = op
+                break
+
+        # 提取 data_type
+        data_type_patterns = [
+            (r"条文|法条|法律条文", "law_article"),
+            (r"案例|法律案例|判例", "law_case"),
+            (r"书籍|法律书|法律书籍", "law_book"),
+            (r"类型|法律类型|法条类型", "law_type"),
+        ]
+        for pattern, dt in data_type_patterns:
+            if re.search(pattern, query):
+                entities["data_type"] = dt
+                break
+
+        return entities
     
     def get_supported_intents(self) -> List[str]:
         """

@@ -39,6 +39,15 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
             Integer userId= Integer.valueOf(claims.get("userId").toString());
             log.info("用户id:{}", userId);
             BaseContext.setCurrentId(userId);
+
+            // 设置用户角色
+            Object roleObj = claims.get("role");
+            if (roleObj != null) {
+                Integer role = Integer.valueOf(roleObj.toString());
+                BaseContext.setCurrentRole(role);
+                log.info("用户角色:{}", role);
+            }
+
             return true;
         }catch (Exception e){
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -52,7 +61,8 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
                                 Object handler,
                                 Exception ex) throws Exception {
         BaseContext.removeCurrentId();
-        log.debug("已清理ThreadLocal中的用户ID");
+        BaseContext.removeCurrentRole();
+        log.debug("已清理ThreadLocal中的用户ID和角色");
     }
 
 }

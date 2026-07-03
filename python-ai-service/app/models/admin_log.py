@@ -14,6 +14,9 @@ class AdminLog(BaseModel):
     output_data: Optional[Dict[str, Any]] = Field(None, description="输出数据")
     error_message: Optional[str] = Field(None, description="错误信息")
     duration_ms: Optional[int] = Field(None, description="执行时长(毫秒)")
+    rounds_used: Optional[int] = Field(None, description="实际使用的工具调用轮数")
+    token_usage: Optional[Dict[str, int]] = Field(None, description="token消耗统计(prompt/completion/total)")
+    timeout_reached: Optional[bool] = Field(None, description="是否因超时终止")
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
     updated_at: datetime = Field(default_factory=datetime.now, description="更新时间")
 

@@ -51,6 +51,12 @@ class AdminLogService:
             log.agent_type = data["agent_type"]
         if "action" in data:
             log.action = data["action"]
+        if "rounds_used" in data:
+            log.rounds_used = data["rounds_used"]
+        if "token_usage" in data:
+            log.token_usage = data["token_usage"]
+        if "timeout_reached" in data:
+            log.timeout_reached = data["timeout_reached"]
         
         log.updated_at = datetime.now()
         
