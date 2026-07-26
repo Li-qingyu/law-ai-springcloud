@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawaiservice.mapper.GuestConsultationMapper">
+
+    <insert id="insert" parameterType="org.lawcommoncore.entity.GuestConsultation" useGeneratedKeys="true" keyProperty="id">
+        insert into guest_consultation (session_id, turn_number, guest_id, question, answer, data_cards, create_time)
+        values (#{sessionId}, #{turnNumber}, #{guestId}, #{question}, #{answer}, #{dataCards}, #{createTime})
+    </insert>
+
+    <select id="selectByGuestId" resultType="org.lawcommoncore.entity.GuestConsultation">
+        select * from guest_consultation where guest_id = #{guestId}
+    </select>
+
+    <select id="getAllGuestSession" resultType="org.lawcommoncore.vo.AiSessionHistoryVO">
+        select
+            id,
+            session_id as sessionId,
+            question as title,
+            answer as content,
+            create_time as createTime
+        from guest_consultation
+        where turn_number = 1 and guest_id = #{guestId}
+        order by create_time desc
+    </select>
+
+    <select id="guestChatDetail" resultType="org.lawcommoncore.vo.AiConsultationDetailVO">
+        select
+            id,
+            session_id as sessionId,
+            turn_number as turnNumber,
+            guest_id as userId,
+            question,
+            answer,
+            data_cards as dataCardsJson,
+            create_time as createTime
+        from guest_consultation
+        where session_id = #{sessionId}
+        order by turn_number
+    </select>
+
+    <delete id="deleteGuestSession">
+        delete from guest_consultation where session_id = #{sessionId}
+    </delete>
+
+    <delete id="deleteByGuestId">
+        delete from guest_consultation where guest_id = #{guestId}
+    </delete>
+
+</mapper>

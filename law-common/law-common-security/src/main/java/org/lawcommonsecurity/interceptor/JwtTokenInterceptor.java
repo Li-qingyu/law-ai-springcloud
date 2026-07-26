@@ -33,19 +33,29 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
         }
 
         String token = request.getHeader(jwtProperties.getAdminTokenName());
+
         try{
             log.info("检验令牌");
-            Claims claims= jwtUtil.parseJWT(jwtProperties.getAdminSecretKey(), token);
-            Integer userId= Integer.valueOf(claims.get("userId").toString());
-            log.info("用户id:{}", userId);
-            BaseContext.setCurrentId(userId);
+            Claims claims = jwtUtil.parseJWT(jwtProperties.getAdminSecretKey(), token);
+            String type = claims.get("type", String.class);
 
-            // 设置用户角色
-            Object roleObj = claims.get("role");
-            if (roleObj != null) {
-                Integer role = Integer.valueOf(roleObj.toString());
-                BaseContext.setCurrentRole(role);
-                log.info("用户角色:{}", role);
+            if ("guest".equals(type)) {
+                Integer guestId = Integer.valueOf(claims.get("guestId").toString());
+                log.info("游客id:{}", guestId);
+                BaseContext.setCurrentGuestId(guestId);
+                BaseContext.setUserType("guest");
+            } else {
+                Integer userId = Integer.valueOf(claims.get("userId").toString());
+                log.info("用户id:{}", userId);
+                BaseContext.setCurrentId(userId);
+                BaseContext.setUserType("user");
+
+                Object roleObj = claims.get("role");
+                if (roleObj != null) {
+                    Integer role = Integer.valueOf(roleObj.toString());
+                    BaseContext.setCurrentRole(role);
+                    log.info("用户角色:{}", role);
+                }
             }
 
             return true;
@@ -60,9 +70,8 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
                                 HttpServletResponse response,
                                 Object handler,
                                 Exception ex) throws Exception {
-        BaseContext.removeCurrentId();
-        BaseContext.removeCurrentRole();
-        log.debug("已清理ThreadLocal中的用户ID和角色");
+        BaseContext.clear();
+        log.debug("已清理ThreadLocal中的用户信息");
     }
 
 }

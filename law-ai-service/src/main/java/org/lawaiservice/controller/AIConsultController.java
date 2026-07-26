@@ -1,22 +1,27 @@
 package org.lawaiservice.controller;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 import org.lawaiservice.client.AiConsultResponse;
 import org.lawaiservice.client.PythonRequest;
+import org.lawaiservice.feign.GuestFeignClient;
 import org.lawaiservice.feign.LawServiceFeignClient;
 import org.lawaiservice.mapper.AiConsultationMapper;
+import org.lawaiservice.mapper.GuestConsultationMapper;
 import org.lawaiservice.service.AIConsultService;
 import org.lawaiservice.utils.HttpClient;
 import org.lawcommoncore.context.BaseContext;
 import org.lawcommoncore.dto.AiConsultDTO;
 import org.lawcommoncore.entity.AiConsultation;
 import org.lawcommoncore.entity.ConversationHistory;
+import org.lawcommoncore.entity.GuestConsultation;
 import org.lawcommoncore.entity.LawArticle;
 import org.lawcommoncore.result.Result;
 import org.lawcommoncore.vo.AiConsultationDetailVO;
 import org.lawcommoncore.vo.AiSessionHistoryVO;
+import org.lawcommoncore.vo.GuestInfoVO;
 import org.lawcommoncore.vo.LawCaseVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -35,7 +40,11 @@ public class AIConsultController {
     @Autowired
     private LawServiceFeignClient lawServiceFeignClient;
     @Autowired
+    private GuestFeignClient guestFeignClient;
+    @Autowired
     private AiConsultationMapper aiConsultationMapper;
+    @Autowired
+    private GuestConsultationMapper guestConsultationMapper;
 
     private static final String STREAM_URL = "http://localhost:8000/v1/ai/consult/stream";
     private final ExecutorService executorService = Executors.newCachedThreadPool();
@@ -50,8 +59,32 @@ public class AIConsultController {
     public SseEmitter consultStream(@RequestParam String question, @RequestParam String sessionId) {
         log.info("流式ai咨询：question={}, sessionId={}", question, sessionId);
 
-        // 在主线程中捕获用户ID（ThreadLocal 在异步线程中不可用）
-        Integer currentUserId = BaseContext.getCurrentId();
+        // 在主线程中捕获用户/游客信息（ThreadLocal 在异步线程中不可用）
+        String userType = BaseContext.getUserType();
+        Integer currentUserId = null;
+        Integer currentGuestId = null;
+
+        if ("guest".equals(userType)) {
+            currentGuestId = BaseContext.getCurrentGuestId();
+            Result<Boolean> canAsk = guestFeignClient.canAsk(currentGuestId);
+            if (!Boolean.TRUE.equals(canAsk.getData())) {
+                SseEmitter errorEmitter = new SseEmitter();
+                try {
+                    JSONObject errorEvent = new JSONObject();
+                    errorEvent.put("type", "error");
+                    errorEvent.put("message", "提问次数已用完，请注册后继续");
+                    errorEmitter.send(errorEvent.toJSONString());
+                } catch (Exception ignored) {}
+                errorEmitter.complete();
+                return errorEmitter;
+            }
+        } else {
+            currentUserId = BaseContext.getCurrentId();
+        }
+
+        // 提取为final变量，供lambda表达式使用
+        final Integer finalUserId = currentUserId;
+        final Integer finalGuestId = currentGuestId;
 
         SseEmitter emitter = new SseEmitter(120000L);
 
@@ -70,8 +103,9 @@ public class AIConsultController {
                 List<ConversationHistory> history = aiConsultService.getConversationHistory(sessionId);
                 Integer turnNumber = history.size() / 2 + 1;
 
+
                 PythonRequest request = PythonRequest.builder()
-                        .userId(currentUserId)
+                        .userId(finalUserId)
                         .question(question)
                         .sessionId(sessionId)
                         .conversationHistory(history)
@@ -97,7 +131,7 @@ public class AIConsultController {
                             emitter.send(event.toJSONString());
 
                             // 保存会话到数据库和 Redis
-                            saveConsultation(question, sessionId, event, turnNumber, currentUserId);
+                            saveConsultation(question, sessionId, event, turnNumber, finalUserId, finalGuestId, userType);
                         } else if ("error".equals(type)) {
                             // 错误事件
                             emitter.send(eventData);
@@ -130,23 +164,36 @@ public class AIConsultController {
     /**
      * 保存咨询记录到数据库和 Redis
      */
-    private void saveConsultation(String question, String sessionId, JSONObject completeEvent, Integer turnNumber, Integer userId) {
+    private void saveConsultation(String question, String sessionId, JSONObject completeEvent, Integer turnNumber, Integer userId, Integer guestId, String userType) {
         try {
             String answer = completeEvent.getString("answer");
             JSONArray dataCards = completeEvent.getJSONArray("data_cards");
             String dataCardsJson = dataCards != null ? dataCards.toJSONString() : "[]";
 
-            AiConsultation consultation = AiConsultation.builder()
-                    .sessionId(sessionId)
-                    .turnNumber(turnNumber)
-                    .userId(userId)
-                    .question(question)
-                    .answer(answer)
-                    .dataCards(dataCardsJson)
-                    .createTime(new java.util.Date())
-                    .build();
-
-            aiConsultService.saveConsultationDirect(consultation);
+            if ("guest".equals(userType)) {
+                GuestConsultation gc = GuestConsultation.builder()
+                        .sessionId(sessionId)
+                        .turnNumber(turnNumber)
+                        .guestId(guestId)
+                        .question(question)
+                        .answer(answer)
+                        .dataCards(dataCardsJson)
+                        .createTime(new java.util.Date())
+                        .build();
+                aiConsultService.saveGuestConsultationDirect(gc);
+                guestFeignClient.incrementCount(guestId);
+            } else {
+                AiConsultation consultation = AiConsultation.builder()
+                        .sessionId(sessionId)
+                        .turnNumber(turnNumber)
+                        .userId(userId)
+                        .question(question)
+                        .answer(answer)
+                        .dataCards(dataCardsJson)
+                        .createTime(new java.util.Date())
+                        .build();
+                aiConsultService.saveConsultationDirect(consultation);
+            }
             log.info("流式咨询记录已保存: sessionId={}, turnNumber={}", sessionId, turnNumber);
         } catch (Exception e) {
             log.error("保存流式咨询记录失败", e);
@@ -216,6 +263,55 @@ public class AIConsultController {
     public Result deleteSession(@RequestParam String sessionId){
         log.info("sessionId:{}",sessionId);
         aiConsultService.deleteSession(sessionId);
+        return Result.success();
+    }
+
+    @GetMapping("/guest/history")
+    public Result<List<AiSessionHistoryVO>> guestHistory(){
+        Integer guestId = BaseContext.getCurrentGuestId();
+        log.info("guest history: guestId={}", guestId);
+        return Result.success(guestConsultationMapper.getAllGuestSession(guestId));
+    }
+
+    @GetMapping("/guest/chatDetail")
+    public Result<List<AiConsultationDetailVO>> guestChatDetail(@RequestParam String sessionId){
+        log.info("guest chatDetail: sessionId={}", sessionId);
+        List<AiConsultationDetailVO> list = guestConsultationMapper.guestChatDetail(sessionId);
+        for (AiConsultationDetailVO vo : list) {
+            vo.setDataCards(JSON.parseArray(vo.getDataCardsJson(), Object.class));
+            vo.setDataCardsJson(null);
+        }
+        return Result.success(list);
+    }
+
+    @DeleteMapping("/guest/deleteSession")
+    public Result deleteGuestSession(@RequestParam String sessionId){
+        log.info("delete guest session: sessionId={}", sessionId);
+        guestConsultationMapper.deleteGuestSession(sessionId);
+        return Result.success();
+    }
+
+    @PostMapping("/guest/createSession")
+    public Result createGuestSession(@RequestParam String sessionId){
+        log.info("create guest session: sessionId={}", sessionId);
+        return Result.success();
+    }
+
+    @PostMapping("/guest/merge")
+    public Result mergeGuest(@RequestParam String guestKey) {
+        Integer userId = BaseContext.getCurrentId();
+        log.info("游客数据迁移: guestKey={}, userId={}", guestKey, userId);
+
+        Result<GuestInfoVO> guestInfoResult = guestFeignClient.getGuestInfo(guestKey);
+        if (guestInfoResult.getData() == null) {
+            return Result.error("游客信息不存在");
+        }
+        Integer guestId = guestInfoResult.getData().getGuestId();
+
+        aiConsultService.mergeGuestData(guestId, userId);
+
+        guestFeignClient.deleteGuest(guestId);
+
         return Result.success();
     }
 
