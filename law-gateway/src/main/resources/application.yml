@@ -39,7 +39,7 @@ spring:
             - id: ai-service
               uri: lb://law-ai-service
               predicates:
-                - Path=/user/ai/**,/admin/ai/**
+                - Path=/user/ai/**,/admin/ai/**,/admin/ai-config/**,/admin/token/**,/internal/ai-config/**
               filters:
                 - StripPrefix=0
 
@@ -80,3 +80,4 @@ gateway:
     - /api/law/cases
     - /test/public
     - /guest/init
+    - /internal/**

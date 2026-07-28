@@ -12,6 +12,7 @@ import org.lawaiservice.feign.GuestFeignClient;
 import org.lawaiservice.mapper.AiConsultationMapper;
 import org.lawaiservice.mapper.GuestConsultationMapper;
 import org.lawaiservice.service.AIConsultService;
+import org.lawaiservice.service.TokenQuotaService;
 import org.lawaiservice.utils.HttpClient;
 import org.lawcommoncore.context.BaseContext;
 import org.lawcommoncore.data_card.ConsultHistoryDataCard;
@@ -55,6 +56,9 @@ public class AIConsultServiceImpl implements AIConsultService {
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
+    @Autowired
+    private TokenQuotaService tokenQuotaService;
+
 
 
     private static final String url="http://localhost:8000/v1/ai/consult";
@@ -83,7 +87,13 @@ public class AIConsultServiceImpl implements AIConsultService {
                 //调用 python服务
                 String response= HttpClient.doPostJson(url,request);
                 AiConsultResponse aiConsultResponse=parsePythonResult(response);
-                                
+
+                // P0-B: 记录 token 使用量（仅注册用户）
+                Integer userId = BaseContext.getCurrentId();
+                if (userId != null && aiConsultResponse.getToken_usage() != null) {
+                    tokenQuotaService.recordUsage(userId, sessionId, aiConsultResponse.getToken_usage());
+                }
+
                 // 将 data_cards 转换为 JSON 字符串
                 String dataCardsJson = JSON.toJSONString(aiConsultResponse.getData_cards());
                                 

@@ -215,6 +215,12 @@ class AiConsultResponse(BaseModel):
         examples=[1],
     )
 
+    token_usage: Optional[dict] = Field(
+        None,
+        description="Token使用统计",
+        examples=[{"input_tokens": 100, "output_tokens": 50, "total_tokens": 150}],
+    )
+
 
     class Config:
         json_schema_extra = {

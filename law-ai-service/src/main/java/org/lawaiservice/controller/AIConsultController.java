@@ -11,6 +11,7 @@ import org.lawaiservice.feign.LawServiceFeignClient;
 import org.lawaiservice.mapper.AiConsultationMapper;
 import org.lawaiservice.mapper.GuestConsultationMapper;
 import org.lawaiservice.service.AIConsultService;
+import org.lawaiservice.service.TokenQuotaService;
 import org.lawaiservice.utils.HttpClient;
 import org.lawcommoncore.context.BaseContext;
 import org.lawcommoncore.dto.AiConsultDTO;
@@ -45,6 +46,8 @@ public class AIConsultController {
     private AiConsultationMapper aiConsultationMapper;
     @Autowired
     private GuestConsultationMapper guestConsultationMapper;
+    @Autowired
+    private TokenQuotaService tokenQuotaService;
 
     private static final String STREAM_URL = "http://localhost:8000/v1/ai/consult/stream";
     private final ExecutorService executorService = Executors.newCachedThreadPool();
@@ -52,7 +55,11 @@ public class AIConsultController {
     @PostMapping("/consult")
     public Result<AiConsultResponse> consult(@RequestBody AiConsultDTO aiConsultDTO){
         log.info("ai咨询：{}" , aiConsultDTO);
-         return Result.success(aiConsultService.consult(aiConsultDTO.getQuestion(), aiConsultDTO.getSessionId() ));
+        Integer userId = BaseContext.getCurrentId();
+        if (userId != null && !tokenQuotaService.checkQuota(userId)) {
+            return Result.error("已超出Token使用限额，请联系管理员");
+        }
+        return Result.success(aiConsultService.consult(aiConsultDTO.getQuestion(), aiConsultDTO.getSessionId()));
     }
 
     @GetMapping("/consult/stream")
@@ -80,13 +87,24 @@ public class AIConsultController {
             }
         } else {
             currentUserId = BaseContext.getCurrentId();
+            if (!tokenQuotaService.checkQuota(currentUserId)) {
+                SseEmitter errorEmitter = new SseEmitter();
+                try {
+                    JSONObject errorEvent = new JSONObject();
+                    errorEvent.put("type", "error");
+                    errorEvent.put("message", "已超出Token使用限额，请联系管理员");
+                    errorEmitter.send(errorEvent.toJSONString());
+                } catch (Exception ignored) {}
+                errorEmitter.complete();
+                return errorEmitter;
+            }
         }
 
         // 提取为final变量，供lambda表达式使用
         final Integer finalUserId = currentUserId;
         final Integer finalGuestId = currentGuestId;
 
-        SseEmitter emitter = new SseEmitter(120000L);
+        SseEmitter emitter = new SseEmitter(300000L); // 5分钟超时，AI多阶段调用可能较慢
 
         emitter.onTimeout(() -> {
             log.warn("SSE 连接超时: sessionId={}", sessionId);
@@ -122,6 +140,14 @@ public class AIConsultController {
                             // 转发状态、进度、token 事件给前端
                             emitter.send(eventData);
                         } else if ("complete".equals(type)) {
+                            // P0-B: 解析 token_usage 并记录（仅注册用户）
+                            if (finalUserId != null) {
+                                JSONObject tokenUsage = event.getJSONObject("token_usage");
+                                if (tokenUsage != null) {
+                                    tokenQuotaService.recordUsage(finalUserId, sessionId, tokenUsage);
+                                }
+                            }
+
                             // 转换 data_cards 为前端期望的嵌套结构
                             JSONArray rawCards = event.getJSONArray("data_cards");
                             JSONArray transformedCards = transformDataCards(rawCards);

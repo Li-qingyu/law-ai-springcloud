@@ -58,6 +58,7 @@ def _patched_subtract_client_response(self, resp, prev_resp):
 
 
 _ChatTongyi.subtract_client_response = _patched_subtract_client_response
+from app.utils.token_collector import TokenCollector, extract_usage_metadata
 from app.models.request import AiConsultRequest
 from app.models.response import AiConsultResponse
 from app.repositories.milvus_client import init_milvus
@@ -355,7 +356,7 @@ async def pre_analyze(question: str, conversation_history: list,
     # 2. 无历史且规则命中 → 直接返回
     if intent and not has_history:
         logging.info(f"[pre_analyze] 规则分类: intent={intent}, question={question[:50]}")
-        return {"resolved_question": question, "intent": intent}
+        return {"resolved_question": question, "intent": intent, "usage_metadata": None}
 
     # 3. 有历史或规则未命中 → LLM 兜底（在线程池中执行，避免阻塞事件循环）
     settings = get_settings()
@@ -384,16 +385,18 @@ async def pre_analyze(question: str, conversation_history: list,
             content = content.split("```")[1]
             if content.startswith("json"):
                 content = content[4:]
+        usage = extract_usage_metadata(result)
         analysis = json.loads(content)
         resolved = analysis.get("resolved_question", question)
         intent = analysis.get("intent", "consultation")
         logging.info(f"[pre_analyze] LLM分类: intent={intent}, resolved={resolved[:50]}")
-        return {"resolved_question": resolved, "intent": intent}
+        return {"resolved_question": resolved, "intent": intent, "usage_metadata": usage}
     except Exception as e:
         logging.warning(f"[pre_analyze] LLM分类失败，降级为规则结果: {e}")
         return {
             "resolved_question": question,
             "intent": intent or "consultation",
+            "usage_metadata": None,
         }
 
 
@@ -477,6 +480,7 @@ async def consult(request: AiConsultRequest):
     阶段 3: 生成最终回答
     """
     start_time = time.time()
+    token_collector = TokenCollector()
 
     question = request.question
     conversation_history = request.conversation_history or []
@@ -512,6 +516,7 @@ async def consult(request: AiConsultRequest):
 
     # 阶段 1: 轻量预分析（传入 memory_header 作为上下文补充）
     analysis = await pre_analyze(question, conversation_history, memory_header)
+    token_collector.add(analysis.get("usage_metadata"))
 
     history_data = build_history_messages(conversation_history)
     chat_history_text = build_chat_history_text(conversation_history, memory_header)
@@ -560,10 +565,11 @@ async def consult(request: AiConsultRequest):
             if items:
                 action = SimpleNamespace(tool=f"search_{tool_name}")
                 steps.append((action, items))
-        ai_answer = _generate_answer_from_context(
+        ai_answer, usage = _generate_answer_from_context(
             build_tool_context_from_results(search_results),
             question, chat_history_text, history_data, settings
         )
+        token_collector.add(usage)
     else:
         # Agent 推理 — OpenAI Tools Agent，支持并行工具调用
         logging.info("已加载搜索工具: 3个 (OpenAI Tools Agent)")
@@ -604,6 +610,13 @@ async def consult(request: AiConsultRequest):
     except Exception as e:
         logging.warning(f"[记忆] 短期记忆更新失败: {e}")
 
+    token_usage = token_collector.to_dict()
+    token_usage["provider"] = "qwen"
+    token_usage["model_name"] = settings.OPENAI_MODEL
+    logging.info(f"Token使用: input={token_usage['input_tokens']}, "
+                 f"output={token_usage['output_tokens']}, "
+                 f"total={token_usage['total_tokens']}")
+
     return AiConsultResponse(
         answer=ai_answer,
         data_cards=data,
@@ -611,12 +624,13 @@ async def consult(request: AiConsultRequest):
         user_id=request.user_id,
         turn_number=len(history_data) // 2 + 1,
         processing_time_ms=processing_time_ms,
+        token_usage=token_usage,
     )
 
 
 def _generate_answer_from_context(tool_context: str, question: str,
-                                   chat_history_text: str, history_data: list,
-                                   settings) -> str:
+                                    chat_history_text: str, history_data: list,
+                                    settings) -> tuple[str, dict | None]:
     """从工具上下文直接生成回答（用于简单查询快速通道，非流式）"""
     llm = ChatTongyi(
         api_key=settings.DASHSCOPE_API_KEY,
@@ -635,7 +649,7 @@ def _generate_answer_from_context(tool_context: str, question: str,
     messages.append(HumanMessage(content=question))
 
     result = llm.invoke(messages)
-    return result.content
+    return result.content, extract_usage_metadata(result)
 
 
 def _sse_event(event_type: str, data) -> str:
@@ -668,6 +682,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
     Yields SSE 格式的事件字符串。
     """
     start_time = time.time()
+    token_collector = TokenCollector()
 
     question = request.question
     conversation_history = request.conversation_history or []
@@ -709,6 +724,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
     # ==================== 阶段 1: 轻量预分析 ====================
     yield _sse_event("status", "正在分析您的问题...")
     analysis = await pre_analyze(question, conversation_history, memory_header)
+    token_collector.add(analysis.get("usage_metadata"))
     resolved_question = analysis["resolved_question"]
 
     # pre_analyze 完成后构建历史上下文（供后续阶段使用）
@@ -778,7 +794,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
         steps = []
         tool_context = ""
         try:
-            # 使用 astream_events 获取实时进度
+            # 使用 astream_events 获取实时进度及 token 统计
             async for event in agent_executor.astream_events({
                 "input": resolved_question,
                 "chat_history": agent_chat_history,
@@ -798,6 +814,11 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
                         "step": "tool_result",
                         "status": "complete"
                     })
+                elif event_kind == "on_llm_end":
+                    output = event.get("data", {}).get("output", {})
+                    usage = extract_usage_metadata(output)
+                    if usage:
+                        token_collector.add(usage)
                 elif event_kind == "on_chain_end" and event.get("name") == "AgentExecutor":
                     result = event.get("data", {}).get("output", {})
                     steps = result.get("intermediate_steps", [])
@@ -831,8 +852,10 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
     messages.append(HumanMessage(content=question))
 
     full_answer = ""
+    last_chunk = None
     try:
         for chunk in stream_llm.stream(messages):
+            last_chunk = chunk
             token = chunk.content
             if token:
                 full_answer += token
@@ -841,6 +864,11 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
         logging.error(f"LLM 流式生成失败: {e}")
         yield _sse_event("error", {"message": f"生成失败: {str(e)}"})
         return
+
+    # 流式生成的最后一个 chunk 提取 token 用量
+    usage = extract_usage_metadata(last_chunk)
+    if usage:
+        token_collector.add(usage)
 
     # ==================== 发送 complete 事件 ====================
     data_cards = create_data_card(steps)
@@ -866,6 +894,9 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
     except Exception as e:
         logging.warning(f"[记忆] 短期记忆更新失败: {e}")
 
+    logging.info(f"Token使用: input={token_collector.input_tokens}, "
+                 f"output={token_collector.output_tokens}, "
+                 f"total={token_collector.total_tokens}")
     logging.info(f"花费时间: {total_time_ms} ms")
     complete_event = json.dumps({
         "type": "complete",
@@ -875,6 +906,13 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
         "user_id": request.user_id,
         "turn_number": len(history_data) // 2 + 1,
         "processing_time_ms": total_time_ms,
+        "token_usage": {
+            "input_tokens": token_collector.input_tokens,
+            "output_tokens": token_collector.output_tokens,
+            "total_tokens": token_collector.total_tokens,
+            "provider": "qwen",
+            "model_name": settings.OPENAI_MODEL,
+        },
     }, ensure_ascii=False, default=str)
     yield f"data: {complete_event}\n\n"
 
@@ -908,5 +946,11 @@ if __name__ == '__main__':
         ]
     )
     import asyncio
-    result = asyncio.run(consult(a1))
-    print(result)
+
+
+    async def main():
+        async for chunk in consult_stream(a1):
+            print(chunk)
+
+
+    asyncio.run(main())

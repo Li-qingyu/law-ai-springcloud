@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawaiservice.mapper.UserTokenQuotaMapper">
+
+    <resultMap id="BaseMap" type="org.lawcommoncore.entity.UserTokenQuota">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="daily_limit" property="dailyLimit"/>
+        <result column="monthly_limit" property="monthlyLimit"/>
+        <result column="total_limit" property="totalLimit"/>
+        <result column="daily_used" property="dailyUsed"/>
+        <result column="monthly_used" property="monthlyUsed"/>
+        <result column="total_used" property="totalUsed"/>
+        <result column="last_reset_daily" property="lastResetDaily"/>
+        <result column="last_reset_monthly" property="lastResetMonthly"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectByUserId" resultMap="BaseMap">
+        select * from user_token_quota where user_id = #{userId}
+    </select>
+
+    <insert id="insert" parameterType="org.lawcommoncore.entity.UserTokenQuota" useGeneratedKeys="true" keyProperty="id">
+        insert into user_token_quota (user_id, daily_limit, monthly_limit, total_limit)
+        values (#{userId}, #{dailyLimit}, #{monthlyLimit}, #{totalLimit})
+    </insert>
+
+    <insert id="initQuota">
+        insert ignore into user_token_quota (user_id, daily_limit, monthly_limit)
+        values (#{userId}, 100000, 3000000)
+    </insert>
+
+    <update id="updateUsage">
+        update user_token_quota
+        set daily_used   = daily_used + #{totalTokens},
+            monthly_used = monthly_used + #{totalTokens},
+            total_used   = total_used + #{totalTokens}
+        where user_id = #{userId}
+    </update>
+
+    <update id="updateLimit" parameterType="org.lawcommoncore.entity.UserTokenQuota">
+        update user_token_quota
+        <set>
+            <if test="dailyLimit != null">daily_limit = #{dailyLimit},</if>
+            <if test="monthlyLimit != null">monthly_limit = #{monthlyLimit},</if>
+            <if test="totalLimit != null">total_limit = #{totalLimit},</if>
+        </set>
+        where user_id = #{userId}
+    </update>
+
+    <update id="resetDaily">
+        update user_token_quota
+        set daily_used = 0, last_reset_daily = curdate()
+        where user_id = #{userId}
+    </update>
+
+    <update id="resetMonthly">
+        update user_token_quota
+        set monthly_used = 0, last_reset_monthly = #{month}
+        where user_id = #{userId}
+    </update>
+
+    <update id="resetAllDaily">
+        update user_token_quota
+        set daily_used = 0, last_reset_daily = curdate()
+    </update>
+
+    <update id="resetAllMonthly">
+        update user_token_quota
+        set monthly_used = 0, last_reset_monthly = #{month}
+    </update>
+
+    <select id="selectList" resultMap="BaseMap">
+        select * from user_token_quota order by user_id
+    </select>
+
+</mapper>

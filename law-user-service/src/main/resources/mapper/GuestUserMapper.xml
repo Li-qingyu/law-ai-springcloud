@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawuserservice.mapper.GuestUserMapper">
+
+    <resultMap id="guestUserMap" type="org.lawcommoncore.entity.GuestUser">
+        <id property="id" column="id"/>
+        <result property="guestKey" column="guest_key"/>
+        <result property="nickname" column="nickname"/>
+        <result property="questionCount" column="question_count"/>
+        <result property="maxQuestion" column="max_question"/>
+        <result property="ipAddress" column="ip_address"/>
+        <result property="userAgent" column="user_agent"/>
+        <result property="isDeleted" column="is_deleted"/>
+        <result property="deleteTime" column="delete_time"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="org.lawcommoncore.entity.GuestUser" useGeneratedKeys="true" keyProperty="id">
+        insert into guest_user (guest_key, nickname, question_count, max_question, ip_address, user_agent, is_deleted, create_time, update_time)
+        values (#{guestKey}, #{nickname}, #{questionCount}, #{maxQuestion}, #{ipAddress}, #{userAgent}, #{isDeleted}, #{createTime}, #{updateTime})
+    </insert>
+
+    <update id="updateById" parameterType="org.lawcommoncore.entity.GuestUser">
+        update guest_user
+        <set>
+            <if test="isDeleted != null">is_deleted = #{isDeleted},</if>
+            <if test="deleteTime != null">delete_time = #{deleteTime},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <update id="incrementQuestionCount">
+        update guest_user set question_count = question_count + 1 where id = #{id}
+    </update>
+
+    <select id="getByGuestKey" resultMap="guestUserMap">
+        select * from guest_user where guest_key = #{guestKey} and is_deleted = 0
+    </select>
+
+    <select id="getById" resultMap="guestUserMap">
+        select * from guest_user where id = #{id} and is_deleted = 0
+    </select>
+
+</mapper>

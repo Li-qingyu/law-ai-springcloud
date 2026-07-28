@@ -84,6 +84,13 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             ServerHttpRequest mutatedRequest;
 
             if ("guest".equals(type)) {
+                // 游客禁止访问管理接口
+                if (isAdminPath(path)) {
+                    log.warn("游客无权访问管理接口: path={}", path);
+                    ServerHttpResponse response = exchange.getResponse();
+                    response.setStatusCode(HttpStatus.FORBIDDEN);
+                    return response.setComplete();
+                }
                 Integer guestId = Integer.valueOf(claims.get("guestId").toString());
                 log.info("JWT校验通过，游客id: {}, 路径: {}", guestId, path);
                 mutatedRequest = request.mutate()
@@ -92,7 +99,19 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
                         .build();
             } else {
                 Integer userId = Integer.valueOf(claims.get("userId").toString());
-                log.info("JWT校验通过，用户id: {}, 路径: {}", userId, path);
+                Integer role = claims.get("role", Integer.class);
+
+                // P0-C: 管理接口仅超级管理员(role=1)可访问
+                if (isAdminPath(path)) {
+                    if (role == null || role != 1) {
+                        log.warn("权限不足: userId={}, role={}, path={}", userId, role, path);
+                        ServerHttpResponse response = exchange.getResponse();
+                        response.setStatusCode(HttpStatus.FORBIDDEN);
+                        return response.setComplete();
+                    }
+                }
+
+                log.info("JWT校验通过，用户id: {}, 角色: {}, 路径: {}", userId, role, path);
                 mutatedRequest = request.mutate()
                         .header("X-User-Id", String.valueOf(userId))
                         .header("X-User-Type", "user")
@@ -106,6 +125,15 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return response.setComplete();
         }
+    }
+
+    private static final List<String> ROLE_REQUIRED_PATHS = List.of(
+            "/admin/ai-config/**",
+            "/admin/token/**"
+    );
+
+    private boolean isAdminPath(String path) {
+        return ROLE_REQUIRED_PATHS.stream().anyMatch(pattern -> PATH_MATCHER.match(pattern, path));
     }
 
     private boolean isWhitelist(String path) {

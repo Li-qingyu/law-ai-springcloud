@@ -26,9 +26,12 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
      */
     @Override
     public boolean preHandle(HttpServletRequest  request, HttpServletResponse response, Object handler) throws  Exception {
-        // 内部服务调用，直接放行
+        // 内部服务调用或内部接口，直接放行
         String internalCall = request.getHeader("X-Internal-Call");
         if ("true".equals(internalCall)) {
+            return true;
+        }
+        if (request.getRequestURI().startsWith("/internal/")) {
             return true;
         }
 
