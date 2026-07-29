@@ -45,13 +45,17 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     private static final AntPathMatcher PATH_MATCHER = new AntPathMatcher();
 
+    private static final List<String> PUBLIC_PATHS = List.of(
+            "/guest/init"
+    );
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
-        // 白名单放行
-        if (isWhitelist(path)) {
+        // 白名单放行（Nacos配置 + 硬编码公共路径）
+        if (isWhitelist(path) || PUBLIC_PATHS.stream().anyMatch(p -> PATH_MATCHER.match(p, path))) {
             log.info(path + "是白名单");
             return chain.filter(exchange);
         }
@@ -76,13 +80,43 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
                     .parseSignedClaims(token)
                     .getPayload();
 
-            Integer userId = Integer.valueOf(claims.get("userId").toString());
-            log.info("JWT校验通过，用户id: {}, 路径: {}", userId, path);
+            String type = claims.get("type", String.class);
+            ServerHttpRequest mutatedRequest;
 
-            // 将userId传递给下游服务（响应式环境不能用ThreadLocal）
-            ServerHttpRequest mutatedRequest = request.mutate()
-                    .header("X-User-Id", String.valueOf(userId))
-                    .build();
+            if ("guest".equals(type)) {
+                // 游客禁止访问管理接口
+                if (isAdminPath(path)) {
+                    log.warn("游客无权访问管理接口: path={}", path);
+                    ServerHttpResponse response = exchange.getResponse();
+                    response.setStatusCode(HttpStatus.FORBIDDEN);
+                    return response.setComplete();
+                }
+                Integer guestId = Integer.valueOf(claims.get("guestId").toString());
+                log.info("JWT校验通过，游客id: {}, 路径: {}", guestId, path);
+                mutatedRequest = request.mutate()
+                        .header("X-Guest-Id", String.valueOf(guestId))
+                        .header("X-User-Type", "guest")
+                        .build();
+            } else {
+                Integer userId = Integer.valueOf(claims.get("userId").toString());
+                Integer role = claims.get("role", Integer.class);
+
+                // P0-C: 管理接口仅超级管理员(role=1)可访问
+                if (isAdminPath(path)) {
+                    if (role == null || role != 1) {
+                        log.warn("权限不足: userId={}, role={}, path={}", userId, role, path);
+                        ServerHttpResponse response = exchange.getResponse();
+                        response.setStatusCode(HttpStatus.FORBIDDEN);
+                        return response.setComplete();
+                    }
+                }
+
+                log.info("JWT校验通过，用户id: {}, 角色: {}, 路径: {}", userId, role, path);
+                mutatedRequest = request.mutate()
+                        .header("X-User-Id", String.valueOf(userId))
+                        .header("X-User-Type", "user")
+                        .build();
+            }
 
             return chain.filter(exchange.mutate().request(mutatedRequest).build());
         } catch (Exception e) {
@@ -91,6 +125,15 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return response.setComplete();
         }
+    }
+
+    private static final List<String> ROLE_REQUIRED_PATHS = List.of(
+            "/admin/ai-config/**",
+            "/admin/token/**"
+    );
+
+    private boolean isAdminPath(String path) {
+        return ROLE_REQUIRED_PATHS.stream().anyMatch(pattern -> PATH_MATCHER.match(pattern, path));
     }
 
     private boolean isWhitelist(String path) {

@@ -3,6 +3,7 @@ package org.lawaiservice.service;
 import org.lawaiservice.client.AiConsultResponse;
 import org.lawcommoncore.entity.AiConsultation;
 import org.lawcommoncore.entity.ConversationHistory;
+import org.lawcommoncore.entity.GuestConsultation;
 import org.lawcommoncore.vo.AiConsultationDetailVO;
 import org.lawcommoncore.vo.AiSessionHistoryVO;
 
@@ -22,4 +23,8 @@ public interface AIConsultService {
     List<ConversationHistory> getConversationHistory(String sessionId);
 
     void saveConsultationDirect(AiConsultation consultation);
+
+    void saveGuestConsultationDirect(GuestConsultation consultation);
+
+    void mergeGuestData(Integer guestId, Integer userId);
 }

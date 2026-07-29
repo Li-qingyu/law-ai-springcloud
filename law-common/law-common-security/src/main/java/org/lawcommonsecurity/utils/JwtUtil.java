@@ -12,6 +12,17 @@ import java.util.Map;
 @Component
 public class JwtUtil {
 
+    public static Claims parseToken(String secretKey, String tokens) {
+        return Jwts.parser()
+                .verifyWith(getStaticSecretKey(secretKey))
+                .build()
+                .parseSignedClaims(tokens)
+                .getPayload();
+    }
+    private static SecretKey getStaticSecretKey(String secretKey) {
+        return io.jsonwebtoken.security.Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
+    }
+
     private SecretKey getSecretKey(String secretKey) {
         return io.jsonwebtoken.security.Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
     }

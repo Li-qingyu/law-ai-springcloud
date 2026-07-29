@@ -29,7 +29,7 @@ class LongTermMemory:
         self.top_k = settings.MEMORY_LONG_TERM_TOP_K
         self.privacy = PrivacyManager()
 
-    def recall(self, user_id: int, current_question: str,
+    def recall(self, user_id: Optional[int], current_question: str,
                short_term_summary: Optional[dict] = None) -> str:
         """
         从长期记忆中召回相关历史。
@@ -37,14 +37,14 @@ class LongTermMemory:
         仅在短期记忆缺失时调用，避免每次请求都查 Milvus。
 
         Args:
-            user_id: 当前用户 ID
+            user_id: 当前用户 ID（游客为 None）
             current_question: 当前问题
             short_term_summary: 短期记忆摘要（可选，用于增强查询）
 
         Returns:
             记忆提示块字符串，无命中时返回空字符串
         """
-        if not self.enabled:
+        if not self.enabled or user_id is None:
             return ""
 
         try:

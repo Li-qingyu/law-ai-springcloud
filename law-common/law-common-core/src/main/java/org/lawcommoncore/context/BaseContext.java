@@ -4,6 +4,8 @@ public class BaseContext {
 
     public static ThreadLocal<Integer> threadLocal = new ThreadLocal<>();
     public static ThreadLocal<Integer> roleLocal = new ThreadLocal<>();
+    public static ThreadLocal<Integer> guestIdLocal = new ThreadLocal<>();
+    public static ThreadLocal<String> userTypeLocal = new ThreadLocal<>();
 
     public static void setCurrentId(Integer id) {
         threadLocal.set(id);
@@ -27,6 +29,37 @@ public class BaseContext {
 
     public static void removeCurrentRole() {
         roleLocal.remove();
+    }
+
+    public static void setCurrentGuestId(Integer guestId) {
+        guestIdLocal.set(guestId);
+    }
+
+    public static Integer getCurrentGuestId() {
+        return guestIdLocal.get();
+    }
+
+    public static void removeCurrentGuestId() {
+        guestIdLocal.remove();
+    }
+
+    public static void setUserType(String userType) {
+        userTypeLocal.set(userType);
+    }
+
+    public static String getUserType() {
+        return userTypeLocal.get();
+    }
+
+    public static void removeUserType() {
+        userTypeLocal.remove();
+    }
+
+    public static void clear() {
+        threadLocal.remove();
+        roleLocal.remove();
+        guestIdLocal.remove();
+        userTypeLocal.remove();
     }
 
     /**

@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 @AllArgsConstructor
@@ -17,4 +18,5 @@ public class AiConsultResponse {
     private Integer turn_number;
     private List<Object> data_cards;
     private Integer user_id;
+    private Map<String, Object> token_usage;
 }

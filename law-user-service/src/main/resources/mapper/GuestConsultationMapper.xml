@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawuserservice.mapper.GuestConsultationMapper">
+
+    <insert id="insert" parameterType="org.lawcommoncore.entity.GuestConsultation" useGeneratedKeys="true" keyProperty="id">
+        insert into guest_consultation (session_id, turn_number, guest_id, question, answer, data_cards, create_time)
+        values (#{sessionId}, #{turnNumber}, #{guestId}, #{question}, #{answer}, #{dataCards}, #{createTime})
+    </insert>
+
+    <select id="selectByGuestId" resultType="org.lawuserservice.entity.GuestConsultation">
+        select * from guest_consultation where guest_id = #{guestId}
+    </select>
+
+    <delete id="deleteByGuestId">
+        delete from guest_consultation where guest_id = #{guestId}
+    </delete>
+
+</mapper>

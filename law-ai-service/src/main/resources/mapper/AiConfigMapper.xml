@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="org.lawaiservice.mapper.AiConfigMapper">
+
+    <resultMap id="BaseMap" type="org.lawcommoncore.entity.AiConfig">
+        <id column="id" property="id"/>
+        <result column="provider" property="provider"/>
+        <result column="model_name" property="modelName"/>
+        <result column="api_key" property="apiKey"/>
+        <result column="api_base_url" property="apiBaseUrl"/>
+        <result column="is_default" property="isDefault"/>
+        <result column="status" property="status"/>
+        <result column="max_tokens" property="maxTokens"/>
+        <result column="temperature" property="temperature"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectList" resultMap="BaseMap">
+        select * from ai_config order by provider, model_name
+    </select>
+
+    <select id="selectById" resultMap="BaseMap">
+        select * from ai_config where id = #{id}
+    </select>
+
+    <select id="selectDefault" resultMap="BaseMap">
+        select * from ai_config where is_default = 1 and status = 1 limit 1
+    </select>
+
+    <select id="selectByProvider" resultMap="BaseMap">
+        select * from ai_config where provider = #{provider} and status = 1 order by is_default desc limit 1
+    </select>
+
+    <insert id="insert" parameterType="org.lawcommoncore.entity.AiConfig" useGeneratedKeys="true" keyProperty="id">
+        insert into ai_config (provider, model_name, api_key, api_base_url, is_default, status, max_tokens, temperature)
+        values (#{provider}, #{modelName}, #{apiKey}, #{apiBaseUrl}, #{isDefault}, #{status}, #{maxTokens}, #{temperature})
+    </insert>
+
+    <update id="updateById" parameterType="org.lawcommoncore.entity.AiConfig">
+        update ai_config
+        <set>
+            <if test="provider != null">provider = #{provider},</if>
+            <if test="modelName != null">model_name = #{modelName},</if>
+            <if test="apiKey != null">api_key = #{apiKey},</if>
+            <if test="apiBaseUrl != null">api_base_url = #{apiBaseUrl},</if>
+            <if test="isDefault != null">is_default = #{isDefault},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="maxTokens != null">max_tokens = #{maxTokens},</if>
+            <if test="temperature != null">temperature = #{temperature},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        delete from ai_config where id = #{id}
+    </delete>
+
+    <update id="clearDefault">
+        update ai_config set is_default = 0 where is_default = 1
+    </update>
+
+    <update id="setDefault">
+        update ai_config set is_default = 1 where id = #{id}
+    </update>
+
+</mapper>

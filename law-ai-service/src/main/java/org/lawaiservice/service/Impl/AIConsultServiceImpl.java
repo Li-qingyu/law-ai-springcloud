@@ -8,8 +8,11 @@ import org.lawaiservice.client.AiConsultResponse;
 import org.lawaiservice.client.ClientState;
 import org.lawaiservice.client.PythonRequest;
 import org.lawaiservice.feign.LawServiceFeignClient;
+import org.lawaiservice.feign.GuestFeignClient;
 import org.lawaiservice.mapper.AiConsultationMapper;
+import org.lawaiservice.mapper.GuestConsultationMapper;
 import org.lawaiservice.service.AIConsultService;
+import org.lawaiservice.service.TokenQuotaService;
 import org.lawaiservice.utils.HttpClient;
 import org.lawcommoncore.context.BaseContext;
 import org.lawcommoncore.data_card.ConsultHistoryDataCard;
@@ -17,6 +20,7 @@ import org.lawcommoncore.data_card.LawArticleDataCard;
 import org.lawcommoncore.data_card.LawCaseDataCard;
 import org.lawcommoncore.entity.AiConsultation;
 import org.lawcommoncore.entity.ConversationHistory;
+import org.lawcommoncore.entity.GuestConsultation;
 import org.lawcommoncore.entity.LawArticle;
 import org.lawcommoncore.event.AiConsultationSyncEvent;
 import org.lawcommoncore.vo.AiConsultationDetailVO;
@@ -41,12 +45,19 @@ public class AIConsultServiceImpl implements AIConsultService {
     @Autowired
     private AiConsultationMapper aiConsultationMapper;
     @Autowired
+    private GuestConsultationMapper guestConsultationMapper;
+    @Autowired
     private StringRedisTemplate redisTemplate;
     @Autowired
     private LawServiceFeignClient lawServiceFeignClient;
+    @Autowired
+    private GuestFeignClient guestFeignClient;
 
     @Autowired
     private ApplicationEventPublisher eventPublisher;
+
+    @Autowired
+    private TokenQuotaService tokenQuotaService;
 
 
 
@@ -76,7 +87,13 @@ public class AIConsultServiceImpl implements AIConsultService {
                 //调用 python服务
                 String response= HttpClient.doPostJson(url,request);
                 AiConsultResponse aiConsultResponse=parsePythonResult(response);
-                                
+
+                // P0-B: 记录 token 使用量（仅注册用户）
+                Integer userId = BaseContext.getCurrentId();
+                if (userId != null && aiConsultResponse.getToken_usage() != null) {
+                    tokenQuotaService.recordUsage(userId, sessionId, aiConsultResponse.getToken_usage());
+                }
+
                 // 将 data_cards 转换为 JSON 字符串
                 String dataCardsJson = JSON.toJSONString(aiConsultResponse.getData_cards());
                                 
@@ -269,10 +286,8 @@ public class AIConsultServiceImpl implements AIConsultService {
 
     @Override
     public void saveConsultationDirect(AiConsultation consultation) {
-        // 保存到 MySQL
         aiConsultationMapper.insert(consultation);
 
-        // 更新 Redis 会话历史
         updateHistoryToRedis(
                 consultation.getSessionId(),
                 consultation.getQuestion(),
@@ -282,5 +297,55 @@ public class AIConsultServiceImpl implements AIConsultService {
 
         log.info("直接保存咨询记录: sessionId={}, turnNumber={}",
                 consultation.getSessionId(), consultation.getTurnNumber());
+    }
+
+    @Override
+    public void saveGuestConsultationDirect(GuestConsultation consultation) {
+        guestConsultationMapper.insert(consultation);
+
+        updateHistoryToRedis(
+                consultation.getSessionId(),
+                consultation.getQuestion(),
+                consultation.getAnswer(),
+                consultation.getTurnNumber()
+        );
+
+        log.info("直接保存游客咨询记录: sessionId={}, turnNumber={}",
+                consultation.getSessionId(), consultation.getTurnNumber());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void mergeGuestData(Integer guestId, Integer userId) {
+        List<GuestConsultation> guestRecords = guestConsultationMapper.selectByGuestId(guestId);
+        if (guestRecords.isEmpty()) {
+            log.info("游客无咨询记录，无需迁移: guestId={}", guestId);
+            return;
+        }
+
+        for (GuestConsultation gc : guestRecords) {
+            AiConsultation ac = AiConsultation.builder()
+                    .sessionId(gc.getSessionId())
+                    .turnNumber(gc.getTurnNumber())
+                    .userId(userId)
+                    .question(gc.getQuestion())
+                    .answer(gc.getAnswer())
+                    .dataCards(gc.getDataCards())
+                    .createTime(gc.getCreateTime())
+                    .build();
+            aiConsultationMapper.insert(ac);
+
+            updateHistoryToRedis(
+                    gc.getSessionId(),
+                    gc.getQuestion(),
+                    gc.getAnswer(),
+                    gc.getTurnNumber()
+            );
+        }
+
+        guestConsultationMapper.deleteByGuestId(guestId);
+
+        log.info("游客数据迁移完成: guestId={}, userId={}, recordCount={}",
+                guestId, userId, guestRecords.size());
     }
 }
