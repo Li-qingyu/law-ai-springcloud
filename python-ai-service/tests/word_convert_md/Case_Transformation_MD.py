@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """
-使用 Marker Python API 将 PDF 转换为 Markdown，
-并从裁判文书中提取结构化字段，输出 JSON。
+使用 Marker API 将 PDF 转换为 Markdown，并从裁判文书中提取结构化字段，输出 JSON。
 """
 
 import os
 import re
 import json
+import sys
 from pathlib import Path
+
+# 如果你遇到内存问题，可以注释掉 marker 相关，改用 pymupdf4llm（见文末）
 from marker.converters.pdf import PdfConverter
 from marker.models import create_model_dict
 from marker.output import text_from_rendered
 
+
 # ============================================================
-# 1. 从 Markdown 文本中提取结构化字段（复用之前的函数）
+# 1. 从 Markdown 文本中提取结构化字段
 # ============================================================
 def extract_fields(md_text: str) -> dict:
     """
@@ -120,19 +123,12 @@ def convert_pdf_to_markdown(pdf_path: str) -> str:
         raise FileNotFoundError(f"PDF 文件不存在: {pdf_path}")
 
     print("正在初始化 Marker 转换器（首次运行将下载模型）...")
-    # 创建模型字典（包含必要的模型）
     model_dict = create_model_dict()
-    converter = PdfConverter(
-        artifact_dict=model_dict,
-        # 可在此传入自定义配置，例如：
-        # config=config_dict,
-    )
+    converter = PdfConverter(artifact_dict=model_dict)
 
     print(f"正在转换 PDF: {pdf_path} ...")
     rendered = converter(pdf_path)
-    # 提取文本（Markdown）和元数据
     text, metadata, images = text_from_rendered(rendered)
-
     print("转换完成。")
     return text
 
@@ -142,19 +138,13 @@ def convert_pdf_to_markdown(pdf_path: str) -> str:
 # ============================================================
 def main(pdf_path: str, output_json_path: str = None):
     try:
-        # 1. 转换 PDF -> Markdown
         md_text = convert_pdf_to_markdown(pdf_path)
-
-        # 2. 提取结构化字段
         data = extract_fields(md_text)
 
-        # 3. 输出 JSON（终端）
         print("\n========== 提取结果 ==========")
         print(json.dumps(data, ensure_ascii=False, indent=2))
 
-        # 4. 保存 JSON 文件
         if output_json_path is None:
-            # 默认保存到 PDF 同目录，文件名相同，扩展名 .json
             pdf_name = Path(pdf_path).stem
             output_json_path = Path(pdf_path).parent / f"{pdf_name}.json"
         with open(output_json_path, 'w', encoding='utf-8') as f:
@@ -167,14 +157,12 @@ def main(pdf_path: str, output_json_path: str = None):
 
 
 # ============================================================
-# 4. 命令行入口
+# 4. 直接指定路径运行
 # ============================================================
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) < 2:
-        print("用法: python extract_with_marker_api.py <pdf_file_path> [output_json_path]")
-        sys.exit(1)
-
-    pdf_file = sys.argv[1]
-    json_file = sys.argv[2] if len(sys.argv) > 2 else None
+    # ===== 在这里直接修改 PDF 文件路径 =====
+    pdf_file = r"C:\Users\hao.jingyu\Desktop\霍某贸易（上海）有限公司诉上海保某机电设备有限公司、孙某蓉公司解散纠纷案.pdf"
+    # 可选：指定输出 JSON 路径（不指定则自动生成）
+    json_file = None
+    # =====================================
     main(pdf_file, json_file)
