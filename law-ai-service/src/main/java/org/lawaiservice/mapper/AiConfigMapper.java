@@ -26,4 +26,12 @@ public interface AiConfigMapper {
     int clearDefault();
 
     int setDefault(Integer id);
+
+    /** 查询是否存在相同 (provider, model_name) 的配置，排除指定 id */
+    int countByProviderModel(@Param("provider") String provider,
+                             @Param("modelName") String modelName,
+                             @Param("excludeId") Integer excludeId);
+
+    /** 查询表中总配置数 */
+    int countAll();
 }

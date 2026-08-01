@@ -21,4 +21,8 @@ public interface AiConfigService {
     int delete(Integer id);
 
     void setDefault(Integer id);
+
+    void syncConfigToRedis();
+
+    void syncConfigToRedis(String provider);
 }

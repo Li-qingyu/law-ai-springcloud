@@ -41,8 +41,6 @@
     <update id="updateById" parameterType="org.lawcommoncore.entity.AiConfig">
         update ai_config
         <set>
-            <if test="provider != null">provider = #{provider},</if>
-            <if test="modelName != null">model_name = #{modelName},</if>
             <if test="apiKey != null">api_key = #{apiKey},</if>
             <if test="apiBaseUrl != null">api_base_url = #{apiBaseUrl},</if>
             <if test="isDefault != null">is_default = #{isDefault},</if>
@@ -64,5 +62,15 @@
     <update id="setDefault">
         update ai_config set is_default = 1 where id = #{id}
     </update>
+
+    <select id="countByProviderModel" resultType="int">
+        select count(*) from ai_config
+        where provider = #{provider} and model_name = #{modelName}
+        <if test="excludeId != null">and id != #{excludeId}</if>
+    </select>
+
+    <select id="countAll" resultType="int">
+        select count(*) from ai_config
+    </select>
 
 </mapper>

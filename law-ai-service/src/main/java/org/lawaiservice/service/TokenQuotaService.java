@@ -2,7 +2,11 @@ package org.lawaiservice.service;
 
 import java.util.Map;
 
+import org.lawcommoncore.entity.UserTokenQuota;
+
 public interface TokenQuotaService {
+
+    UserTokenQuota getQuota(Integer userId);
 
     boolean checkQuota(Integer userId);
 

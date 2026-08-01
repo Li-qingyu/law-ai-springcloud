@@ -9,6 +9,11 @@ spring:
       - nacos:common.yml?group=DEFAULT_GROUP&refreshEnabled=true
       - nacos:common-security.yml?group=DEFAULT_GROUP&refreshEnabled=true
       - nacos:law-ai-service.yml?group=DEFAULT_GROUP&refreshEnabled=true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: 2
   cloud:
     nacos:
       serverAddr: ${NACOS_ADDR:localhost:8848}

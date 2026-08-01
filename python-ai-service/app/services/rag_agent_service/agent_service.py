@@ -8,6 +8,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from app.builders.data_card_builder import DataCardBuilder
+from app.core.ai_config import get_ai_config_manager
 from app.core.config import get_settings
 
 # 检索优化模块
@@ -20,44 +21,6 @@ from app.retrieval.pipelines.dedup import DedupStep
 from app.retrieval.pipelines.rerank import DashScopeReranker, NoopReranker, RerankStep
 from app.retrieval.params import get_params
 
-# ==================== Monkey-patch ChatTongyi streaming bug ====================
-# langchain_community ChatTongyi 的 subtract_client_response 在流式 tool_calls 场景下
-# 当前 chunk 的 tool_calls 数量 > 上一个 chunk 时，index 越界导致 IndexError。
-# 上游 issue: https://github.com/langchain-ai/langchain/issues/28076
-from langchain_community.chat_models.tongyi import ChatTongyi as _ChatTongyi
-
-
-def _patched_subtract_client_response(self, resp, prev_resp):
-    """修复版：处理 tool_calls 数量在流式过程中递增的情况"""
-    resp_copy = json.loads(json.dumps(resp))
-    choice = resp_copy["output"]["choices"][0]
-    message = choice["message"]
-
-    prev_resp_copy = json.loads(json.dumps(prev_resp))
-    prev_choice = prev_resp_copy["output"]["choices"][0]
-    prev_message = prev_choice["message"]
-
-    message["content"] = message["content"].replace(prev_message["content"], "")
-
-    if message.get("tool_calls"):
-        prev_tool_calls = prev_message.get("tool_calls", [])
-        for index, tool_call in enumerate(message["tool_calls"]):
-            function = tool_call["function"]
-            if index < len(prev_tool_calls):
-                prev_function = prev_tool_calls[index]["function"]
-                if "name" in function:
-                    function["name"] = function["name"].replace(
-                        prev_function["name"], ""
-                    )
-                if "arguments" in function:
-                    function["arguments"] = function["arguments"].replace(
-                        prev_function["arguments"], ""
-                    )
-
-    return resp_copy
-
-
-_ChatTongyi.subtract_client_response = _patched_subtract_client_response
 from app.utils.token_collector import TokenCollector, extract_usage_metadata
 from app.models.request import AiConsultRequest
 from app.models.response import AiConsultResponse
@@ -68,7 +31,6 @@ from app.tools import create_search_tools
 from app.memory.working_memory import WorkingMemory, build_memory_header, extract_reference_anchor
 from app.memory.short_term_memory import ShortTermMemory
 from app.memory.long_term_memory import LongTermMemory
-from langchain_community.chat_models import ChatTongyi
 
 # ==================== 两阶段分离架构 ====================
 # 阶段 1: pre_analyze() — 轻量预分析（代词消解 + 意图分类），~0.5-1s
@@ -221,7 +183,7 @@ STREAM_ANSWER_PROMPT = """你是一位专业、严谨的法律信息助理。请
 请直接给出回答，不要重复问题本身。"""
 
 
-def build_retriever(intent: str, llm=None) -> Retriever:
+def build_retriever(intent: str, llm=None, api_key: str = None) -> Retriever:
     """
     根据意图构建 Retriever 实例
     - 策略决定"怎么召回"（向量 / 多路改写）
@@ -359,12 +321,7 @@ async def pre_analyze(question: str, conversation_history: list,
         return {"resolved_question": question, "intent": intent, "usage_metadata": None}
 
     # 3. 有历史或规则未命中 → LLM 兜底（在线程池中执行，避免阻塞事件循环）
-    settings = get_settings()
-    llm = ChatTongyi(
-        api_key=settings.DASHSCOPE_API_KEY,
-        model=settings.OPENAI_MODEL,
-        top_p=0.7,
-    )
+    llm = await get_ai_config_manager().create_llm()
 
     # 优先用 conversation_history，没有时用 memory_context
     if conversation_history:
@@ -402,19 +359,13 @@ async def pre_analyze(question: str, conversation_history: list,
 
 
 # 创建agent
-def _build_agent_executor(settings) -> AgentExecutor:
+def _build_agent_executor(settings, llm) -> AgentExecutor:
     """
     构建 OpenAI Tools Agent 执行器。
     Tools Agent 支持 LLM 单步返回多个工具调用，
     AgentExecutor._aiter_next_step 通过 asyncio.gather 并发执行。
     """
     tools = create_search_tools()
-    llm = ChatTongyi(
-        api_key=settings.DASHSCOPE_API_KEY,
-        model=settings.OPENAI_MODEL,
-        top_p=0.7,
-        streaming=False,
-    )
 
     prompt = ChatPromptTemplate.from_messages([
         ("system",  AGENT_SYSTEM_PROMPT),
@@ -547,13 +498,9 @@ async def consult(request: AiConsultRequest):
     steps = []
 
     # 构建 Retriever 并设置全局实例
-    llm = ChatTongyi(
-        api_key=settings.DASHSCOPE_API_KEY,
-        model=settings.OPENAI_MODEL,
-        top_p=0.7,
-        streaming=False,
-    )
-    retriever = build_retriever(intent, llm=llm)
+    llm = await get_ai_config_manager().create_llm()
+    api_key = await get_ai_config_manager().get_api_key()
+    retriever = build_retriever(intent, llm=llm, api_key=api_key)
     from app.tools.searchTool.base_search_tool import set_retriever
     set_retriever(retriever)
 
@@ -565,15 +512,15 @@ async def consult(request: AiConsultRequest):
             if items:
                 action = SimpleNamespace(tool=f"search_{tool_name}")
                 steps.append((action, items))
-        ai_answer, usage = _generate_answer_from_context(
+        ai_answer, usage = await _generate_answer_from_context(
             build_tool_context_from_results(search_results),
-            question, chat_history_text, history_data, settings
+            question, chat_history_text, history_data
         )
         token_collector.add(usage)
     else:
         # Agent 推理 — OpenAI Tools Agent，支持并行工具调用
         logging.info("已加载搜索工具: 3个 (OpenAI Tools Agent)")
-        agent_executor = _build_agent_executor(settings)
+        agent_executor = _build_agent_executor(settings, llm)
 
         # follow_up 追问时注入对话历史，让 Agent 理解上下文
         agent_chat_history = history_data if intent == "follow_up" else []
@@ -628,16 +575,11 @@ async def consult(request: AiConsultRequest):
     )
 
 
-def _generate_answer_from_context(tool_context: str, question: str,
-                                    chat_history_text: str, history_data: list,
-                                    settings) -> tuple[str, dict | None]:
+async def _generate_answer_from_context(tool_context: str, question: str,
+                                          chat_history_text: str,
+                                          history_data: list) -> tuple[str, dict | None]:
     """从工具上下文直接生成回答（用于简单查询快速通道，非流式）"""
-    llm = ChatTongyi(
-        api_key=settings.DASHSCOPE_API_KEY,
-        model=settings.OPENAI_MODEL,
-        top_p=0.7,
-        streaming=False,
-    )
+    llm = await get_ai_config_manager().create_llm()
     system_content = STREAM_ANSWER_PROMPT.format(
         tool_context=tool_context,
         question=question,
@@ -758,13 +700,9 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
     steps = []
 
     # 构建 Retriever 并设置全局实例
-    llm = ChatTongyi(
-        api_key=settings.DASHSCOPE_API_KEY,
-        model=settings.OPENAI_MODEL,
-        top_p=0.7,
-        streaming=False,
-    )
-    retriever = build_retriever(intent, llm=llm)
+    llm = await get_ai_config_manager().create_llm()
+    api_key = await get_ai_config_manager().get_api_key()
+    retriever = build_retriever(intent, llm=llm, api_key=api_key)
     from app.tools.searchTool.base_search_tool import set_retriever
     set_retriever(retriever)
 
@@ -786,7 +724,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
         # ==================== 阶段 2: Agent 推理（并行工具调用） ====================
         yield _sse_event("status", "正在检索法律信息...")
         logging.info("已加载搜索工具: 3个 (OpenAI Tools Agent)")
-        agent_executor = _build_agent_executor(settings)
+        agent_executor = _build_agent_executor(settings, llm)
 
         # follow_up 追问时注入对话历史，让 Agent 理解上下文
         agent_chat_history = history_data if intent == "follow_up" else []
@@ -833,12 +771,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
         yield _sse_event("status", f"找到 {len(steps)} 条相关信息，正在生成回答...")
 
     # ==================== 阶段 3: 流式生成（注入历史） ====================
-    stream_llm = ChatTongyi(
-        api_key=settings.DASHSCOPE_API_KEY,
-        model=settings.OPENAI_MODEL,
-        top_p=0.7,
-        streaming=True,
-    )
+    stream_llm = await get_ai_config_manager().create_llm(streaming=True)
 
     # 构建完整的消息列表（不使用模板，避免工具结果中的 {} 被当作格式化变量）
     system_content = STREAM_ANSWER_PROMPT.format(

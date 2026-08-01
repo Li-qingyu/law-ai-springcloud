@@ -28,6 +28,18 @@ public class TokenQuotaServiceImpl implements TokenQuotaService {
     private final DateTimeFormatter monthFormatter = DateTimeFormatter.ofPattern("yyyy-MM");
 
     @Override
+    public UserTokenQuota getQuota(Integer userId) {
+        UserTokenQuota quota = userTokenQuotaMapper.selectByUserId(userId);
+        if (quota == null) {
+            userTokenQuotaMapper.initQuota(userId);
+            quota = userTokenQuotaMapper.selectByUserId(userId);
+            log.info("[TokenQuota] 懒初始化用户配额: userId={}", userId);
+        }
+        resetIfNeeded(quota);
+        return quota;
+    }
+
+    @Override
     public boolean checkQuota(Integer userId) {
         UserTokenQuota quota = userTokenQuotaMapper.selectByUserId(userId);
 

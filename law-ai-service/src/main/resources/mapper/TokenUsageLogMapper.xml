@@ -45,4 +45,51 @@
         order by id desc
     </select>
 
+    <select id="sumAllTokens" resultType="java.lang.Long">
+        select coalesce(sum(total_tokens), 0) from token_usage_log
+    </select>
+
+    <select id="groupByModel" resultMap="ModelUsageMap">
+        select provider, model_name as modelName,
+               coalesce(sum(total_tokens), 0) as totalTokens,
+               coalesce(sum(input_tokens), 0) as inputTokens,
+               coalesce(sum(output_tokens), 0) as outputTokens
+        from token_usage_log
+        where create_time >= #{startTime} and create_time <![CDATA[ < ]]> #{endTime}
+        group by provider, model_name
+        order by totalTokens desc
+    </select>
+
+    <resultMap id="ModelUsageMap" type="org.lawcommoncore.vo.ModelUsageVO">
+        <result column="provider" property="provider"/>
+        <result column="modelName" property="modelName"/>
+        <result column="totalTokens" property="totalTokens"/>
+        <result column="inputTokens" property="inputTokens"/>
+        <result column="outputTokens" property="outputTokens"/>
+    </resultMap>
+
+    <select id="countDistinctUsersToday" resultType="java.lang.Integer">
+        select count(distinct user_id) from token_usage_log
+        where create_time >= #{startTime}
+    </select>
+
+    <select id="sumTokensBetween" resultType="java.lang.Long">
+        select coalesce(sum(total_tokens), 0) from token_usage_log
+        where create_time >= #{startTime} and create_time <![CDATA[ < ]]> #{endTime}
+    </select>
+
+    <resultMap id="DailyTokenUsageMap" type="org.lawcommoncore.vo.DailyTokenUsageVO">
+        <result column="date" property="date"/>
+        <result column="totalTokens" property="totalTokens"/>
+    </resultMap>
+
+    <select id="sumTokensGroupByDay" resultMap="DailyTokenUsageMap">
+        select date_format(create_time, '%Y-%m-%d') as `date`,
+               coalesce(sum(total_tokens), 0) as totalTokens
+        from token_usage_log
+        where create_time >= #{startTime} and create_time <![CDATA[ < ]]> #{endTime}
+        group by `date`
+        order by `date`
+    </select>
+
 </mapper>

@@ -168,11 +168,8 @@ def _format_rounds_for_summary(rounds: list) -> str:
 
 async def _call_llm_summary(conversation_text: str, llm=None) -> dict:
     """调用 LLM 生成结构化摘要"""
-    from langchain_community.chat_models import ChatTongyi
-    from app.core.config import get_settings
+    from app.core.ai_config import get_ai_config_manager
     from app.memory.privacy_manager import PrivacyManager
-
-    settings = get_settings()
 
     # 隐私脱敏：发送 LLM 前对对话文本做 PII 替换
     pm = PrivacyManager()
@@ -180,10 +177,7 @@ async def _call_llm_summary(conversation_text: str, llm=None) -> dict:
 
     # 使用小模型降低延迟和费用
     if llm is None:
-        llm = ChatTongyi(
-            api_key=settings.DASHSCOPE_API_KEY,
-            model="qwen-turbo",
-        )
+        llm = await get_ai_config_manager().create_llm(model="qwen-turbo")
 
     prompt = SUMMARY_PROMPT.format(conversation_text=safe_text)
 
