@@ -24,7 +24,7 @@ spring:
             - id: user-service
               uri: lb://law-user-service
               predicates:
-                - Path=/admin/users/**, /test/**,/login,/register,/sendEmailCode,/resetPassword,/guest/**
+                - Path=/admin/users/**, /test/**,/login,/register,/sendEmailCode,/resetPassword,/logout,/guest/**
               filters:
                 - StripPrefix=0
             # 法典服务路由

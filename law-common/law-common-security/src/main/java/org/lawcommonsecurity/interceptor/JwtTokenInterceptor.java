@@ -5,6 +5,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.lawcommoncore.context.BaseContext;
+import org.lawcommonredis.utils.RedisUtil;
+import org.lawcommonsecurity.constant.TokenConstant;
 import org.lawcommonsecurity.properties.JwtProperties;
 import org.lawcommonsecurity.utils.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +23,8 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
     private JwtProperties jwtProperties;
     @Autowired
     private JwtUtil jwtUtil;
+    @Autowired
+    private RedisUtil redisUtil;
     /**
      * 检验令牌
      */
@@ -50,6 +54,13 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
             } else {
                 Integer userId = Integer.valueOf(claims.get("userId").toString());
                 log.info("用户id:{}", userId);
+                // 校验 Redis 会话缓存中的 token 是否与当前 token 一致（不一致说明已被新登录顶替/登出/吊销）
+                Object cachedToken = redisUtil.get(TokenConstant.USER_TOKEN_REDIS_KEY_PREFIX + userId);
+                if (cachedToken == null || !token.equals(cachedToken.toString())) {
+                    log.warn("token无效或已失效，拒绝访问 userId:{}", userId);
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    return false;
+                }
                 BaseContext.setCurrentId(userId);
                 BaseContext.setUserType("user");
 

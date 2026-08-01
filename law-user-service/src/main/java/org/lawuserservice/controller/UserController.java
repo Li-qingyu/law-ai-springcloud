@@ -2,11 +2,14 @@ package org.lawuserservice.controller;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.util.PerformanceSensitive;
+import org.lawcommoncore.context.BaseContext;
 import org.lawcommoncore.dto.*;
 import org.lawcommoncore.entity.User;
 import org.lawcommoncore.result.PageResult;
 import org.lawcommoncore.result.Result;
 import org.lawcommoncore.vo.LoginVO;
+import org.lawcommonredis.utils.RedisUtil;
+import org.lawcommonsecurity.constant.TokenConstant;
 import org.lawcommonsecurity.properties.JwtProperties;
 import org.lawcommonsecurity.utils.JwtUtil;
 import org.lawuserservice.service.EmailVerificationService;
@@ -15,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -29,6 +33,8 @@ public class UserController {
     private JwtProperties jwtProperties;
     @Autowired
     private JwtUtil jwtUtil;
+    @Autowired
+    private RedisUtil redisUtil;
     /**
      * 登录
      * @param userLogin
@@ -43,6 +49,9 @@ public class UserController {
         claims.put("role", loginVO.getRole());
         claims.put("type", "user");
         String token = jwtUtil.createJWT(jwtProperties.getAdminSecretKey(), jwtProperties.getAdminTtl(), claims);
+        // 登录成功后，将当前 token 写入 Redis 会话缓存，后续每次请求比对
+        long ttlSeconds = jwtProperties.getAdminTtl() > 0 ? jwtProperties.getAdminTtl() / 1000 : TokenConstant.DEFAULT_CACHE_TTL_SECONDS;
+        redisUtil.set(TokenConstant.USER_TOKEN_REDIS_KEY_PREFIX + loginVO.getId(), token, ttlSeconds);
         loginVO.setToken(token);
         return Result.success(loginVO);
     }
@@ -67,7 +76,12 @@ public class UserController {
     @PostMapping("/resetPassword")
     public Result resetPassword(@RequestBody ForgetFormDTO forgetFormDTO) {
         log.info("忘记密码{}", forgetFormDTO);
-        userService.resetPassword(forgetFormDTO);
+        Integer userId = userService.resetPassword(forgetFormDTO);
+        // 改密成功后吊销该用户旧 token，强制重新登录
+        if (userId != null) {
+            redisUtil.delete(TokenConstant.USER_TOKEN_REDIS_KEY_PREFIX + userId);
+            log.info("重置密码成功，已吊销该用户会话缓存 userId:{}", userId);
+        }
         return Result.success("修改密码成功");
     }
 
@@ -124,12 +138,29 @@ public class UserController {
         return Result.success( user);
     }
     /**
-     * 删除用户
+     * 退出登录
+     * 删除当前用户 Redis 中的 token 会话缓存，使现有 token 立即失效
      */
-    @DeleteMapping("/admin/users/{id}")
-    public Result delete(@PathVariable Integer id) {
-        log.info("删除用户:{}", id);
-        userService.delete(id);
+    @PostMapping("/logout")
+    public Result logout() {
+        Integer userId = BaseContext.getCurrentId();
+        if (userId != null) {
+            redisUtil.delete(TokenConstant.USER_TOKEN_REDIS_KEY_PREFIX + userId);
+            log.info("用户退出登录，已清除会话缓存 userId:{}", userId);
+        }
+        return Result.success("退出成功");
+    }
+
+    /**
+     * 删除用户（支持逗号分隔批量删除），同时清除对应 Redis 会话缓存
+     */
+    @DeleteMapping("/admin/users/{ids}")
+    public Result delete(@PathVariable("ids") List<Integer> ids) {
+        log.info("删除用户:{}", ids);
+        for (Integer userId : ids) {
+            userService.delete(userId);
+            redisUtil.delete(TokenConstant.USER_TOKEN_REDIS_KEY_PREFIX + userId);
+        }
         return Result.success("删除成功");
     }
     /**
@@ -139,6 +170,11 @@ public class UserController {
     public Result updateStatus(@PathVariable Integer id, @RequestParam Integer status) {
         log.info("修改用户状态:{}, status:{}", id, status);
         userService.updateStatus(id, status);
+        // 禁用用户时吊销其全部会话，禁止继续访问
+        if (status != null && status == 0) {
+            redisUtil.delete(TokenConstant.USER_TOKEN_REDIS_KEY_PREFIX + id);
+            log.info("用户已被禁用，已吊销会话缓存 userId:{}", id);
+        }
         return Result.success("修改成功");
     }
     /**

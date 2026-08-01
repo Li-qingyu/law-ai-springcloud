@@ -147,7 +147,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public void resetPassword(ForgetFormDTO forgetFormDTO) {
+    public Integer resetPassword(ForgetFormDTO forgetFormDTO) {
         //检查用户名和邮箱是否正确
         User user = userMapper.selectByUsername(forgetFormDTO.getUsername());
         if(user == null){
@@ -163,6 +163,7 @@ public class UserServiceImpl implements UserService {
         user.setPassword(DigestUtils.md5DigestAsHex(forgetFormDTO.getPassword().getBytes()));
         user.setUpdateTime(LocalDateTime.now());
         userMapper.update(user);
+        return user.getId();
     }
 
 

@@ -1,0 +1,265 @@
+{
+  "virtual_channel_names": [
+    "by-dev-rootcoord-dml_11_467067956674002592v0"
+  ],
+  "physical_channel_names": [
+    "by-dev-rootcoord-dml_11"
+  ],
+  "aliases": [],
+  "start_positions": [],
+  "properties": [
+    {
+      "key": "timezone",
+      "value": "UTC"
+    }
+  ],
+  "status": {
+    "extra_info": {},
+    "error_code": "Success",
+    "reason": "",
+    "code": 0,
+    "retriable": false,
+    "detail": ""
+  },
+  "schema": {
+    "fields": [
+      {
+        "type_params": [
+          {
+            "key": "max_length",
+            "value": "128"
+          }
+        ],
+        "index_params": [],
+        "fieldID": "100",
+        "name": "id",
+        "is_primary_key": true,
+        "description": "",
+        "data_type": "VarChar",
+        "autoID": false,
+        "state": "FieldCreated",
+        "element_type": "None",
+        "default_value": null,
+        "is_dynamic": false,
+        "is_partition_key": false,
+        "is_clustering_key": false,
+        "nullable": false,
+        "is_function_output": false,
+        "dataType": 21,
+        "max_length": "128"
+      },
+      {
+        "type_params": [
+          {
+            "key": "dim",
+            "value": "1024"
+          }
+        ],
+        "index_params": [],
+        "fieldID": "101",
+        "name": "vector",
+        "is_primary_key": false,
+        "description": "",
+        "data_type": "FloatVector",
+        "autoID": false,
+        "state": "FieldCreated",
+        "element_type": "None",
+        "default_value": null,
+        "is_dynamic": false,
+        "is_partition_key": false,
+        "is_clustering_key": false,
+        "nullable": false,
+        "is_function_output": false,
+        "dataType": 101,
+        "dim": "1024"
+      },
+      {
+        "type_params": [],
+        "index_params": [],
+        "fieldID": "102",
+        "name": "source_id",
+        "is_primary_key": false,
+        "description": "MySQL中案例的主键ID",
+        "data_type": "Int64",
+        "autoID": false,
+        "state": "FieldCreated",
+        "element_type": "None",
+        "default_value": null,
+        "is_dynamic": false,
+        "is_partition_key": false,
+        "is_clustering_key": false,
+        "nullable": false,
+        "is_function_output": false,
+        "dataType": 5
+      },
+      {
+        "type_params": [
+          {
+            "key": "max_length",
+            "value": "500"
+          }
+        ],
+        "index_params": [],
+        "fieldID": "103",
+        "name": "title",
+        "is_primary_key": false,
+        "description": "",
+        "data_type": "VarChar",
+        "autoID": false,
+        "state": "FieldCreated",
+        "element_type": "None",
+        "default_value": null,
+        "is_dynamic": false,
+        "is_partition_key": false,
+        "is_clustering_key": false,
+        "nullable": false,
+        "is_function_output": false,
+        "dataType": 21,
+        "max_length": "500"
+      },
+      {
+        "type_params": [
+          {
+            "key": "max_length",
+            "value": "5000"
+          }
+        ],
+        "index_params": [],
+        "fieldID": "104",
+        "name": "content",
+        "is_primary_key": false,
+        "description": "",
+        "data_type": "VarChar",
+        "autoID": false,
+        "state": "FieldCreated",
+        "element_type": "None",
+        "default_value": null,
+        "is_dynamic": false,
+        "is_partition_key": false,
+        "is_clustering_key": false,
+        "nullable": false,
+        "is_function_output": false,
+        "dataType": 21,
+        "max_length": "5000"
+      },
+      {
+        "type_params": [],
+        "index_params": [],
+        "fieldID": "105",
+        "name": "content_json",
+        "is_primary_key": false,
+        "description": "",
+        "data_type": "JSON",
+        "autoID": false,
+        "state": "FieldCreated",
+        "element_type": "None",
+        "default_value": null,
+        "is_dynamic": false,
+        "is_partition_key": false,
+        "is_clustering_key": false,
+        "nullable": false,
+        "is_function_output": false,
+        "dataType": 23
+      },
+      {
+        "type_params": [
+          {
+            "key": "max_length",
+            "value": "10000"
+          },
+          {
+            "key": "enable_analyzer",
+            "value": "true"
+          },
+          {
+            "key": "analyzer_params",
+            "value": "{\"type\":\"chinese\"}"
+          }
+        ],
+        "index_params": [],
+        "fieldID": "106",
+        "name": "bm25_text",
+        "is_primary_key": false,
+        "description": "",
+        "data_type": "VarChar",
+        "autoID": false,
+        "state": "FieldCreated",
+        "element_type": "None",
+        "default_value": null,
+        "is_dynamic": false,
+        "is_partition_key": false,
+        "is_clustering_key": false,
+        "nullable": true,
+        "is_function_output": false,
+        "dataType": 21,
+        "max_length": "10000",
+        "enable_analyzer": "true",
+        "analyzer_params": "{\"type\":\"chinese\"}"
+      },
+      {
+        "type_params": [],
+        "index_params": [],
+        "fieldID": "107",
+        "name": "sparse_vector",
+        "is_primary_key": false,
+        "description": "",
+        "data_type": "SparseFloatVector",
+        "autoID": false,
+        "state": "FieldCreated",
+        "element_type": "None",
+        "default_value": null,
+        "is_dynamic": false,
+        "is_partition_key": false,
+        "is_clustering_key": false,
+        "nullable": false,
+        "is_function_output": true,
+        "dataType": 104
+      }
+    ],
+    "properties": [
+      {
+        "key": "timezone",
+        "value": "UTC"
+      }
+    ],
+    "functions": [
+      {
+        "input_field_names": [
+          "bm25_text"
+        ],
+        "input_field_ids": [
+          "106"
+        ],
+        "output_field_names": [
+          "sparse_vector"
+        ],
+        "output_field_ids": [
+          "107"
+        ],
+        "params": [],
+        "name": "law_cases_bm25",
+        "id": "100",
+        "description": "",
+        "type": "BM25"
+      }
+    ],
+    "struct_array_fields": [],
+    "name": "law_cases",
+    "description": "law_cases with BM25 hybrid search",
+    "autoID": false,
+    "enable_dynamic_field": false,
+    "dbName": "law_ai"
+  },
+  "collectionID": "467067956674002592",
+  "created_timestamp": "467068724427358225",
+  "created_utc_timestamp": "1781725785932",
+  "shards_num": 1,
+  "consistency_level": "Bounded",
+  "collection_name": "law_cases",
+  "db_name": "law_ai",
+  "num_partitions": "1",
+  "db_id": "0",
+  "request_time": "0",
+  "update_timestamp": "467068724427358225",
+  "update_timestamp_str": "467068724427358225"
+}
