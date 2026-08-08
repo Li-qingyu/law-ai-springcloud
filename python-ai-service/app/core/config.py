@@ -48,10 +48,13 @@ class Settings(BaseSettings):
     MULTI_QUERY_ENABLED: bool = True  #问题多路改写是否需要开启
     HYBRID_SEARCH_ENABLED: bool = True  #混合检索（向量+BM25）是否开启
 
-    # Java API 配置
+    # Java API 配置（管理端 Agent 调用 law-law-service）
     JAVA_API_BASE_URL: str = "http://localhost:8082"
     JAVA_API_TIMEOUT: int = 30
     JAVA_API_RETRY_COUNT: int = 3
+
+    # AI 配置获取地址（RAG config_manager 调用 law-ai-service 的 /internal/ai-config）
+    AI_CONFIG_URL: str = "http://localhost:8083"
 
     # 对话记忆管理配置
     MEMORY_WORKING_MAX_TURNS: int = 3          # 工作记忆保留轮数

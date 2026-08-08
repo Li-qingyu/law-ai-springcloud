@@ -27,6 +27,7 @@ import org.lawcommoncore.vo.AiConsultationDetailVO;
 import org.lawcommoncore.vo.AiSessionHistoryVO;
 import org.lawcommoncore.vo.LawCaseVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -61,7 +62,8 @@ public class AIConsultServiceImpl implements AIConsultService {
 
 
 
-    private static final String url="http://localhost:8000/v1/ai/consult";
+    @Value("${python-ai-url:http://localhost:8000}")
+    private String pythonAiUrl;
     private static final String SESSION_KEY_PREFIX = "ai:session:";
     private static final long SESSION_TTL_HOURS = 12;
     private static final int MAX_HISTORY_ROUNDS = 5;
@@ -85,7 +87,7 @@ public class AIConsultServiceImpl implements AIConsultService {
                     .build();
             try{
                 //调用 python服务
-                String response= HttpClient.doPostJson(url,request);
+                String response= HttpClient.doPostJson(pythonAiUrl + "/v1/ai/consult", request);
                 AiConsultResponse aiConsultResponse=parsePythonResult(response);
 
                 // P0-B: 记录 token 使用量（仅注册用户）

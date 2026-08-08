@@ -180,6 +180,11 @@ STREAM_ANSWER_PROMPT = """你是一位专业、严谨的法律信息助理。请
 - 免责声明：末尾提醒"本回答仅供参考，不构成正式法律意见"
 - 最后格式按照md文档对应格式生成。
 
+## 空结果处理（最高优先级）
+- 如果"工具检索结果"为空、或只有"无工具检索结果"字样，说明本次没有检索到任何权威法律信息。
+- 此时只能回复类似："本次咨询未检索到匹配的权威法律信息。请补充更具体的问题（如合同类型、损失情况、争议焦点等），以便为您精准检索权威法律条文、司法解释或典型案例。"
+- 严禁自行引用、编造或默写法条编号、司法解释或司法案例作为依据。
+
 请直接给出回答，不要重复问题本身。"""
 
 
@@ -535,7 +540,12 @@ async def consult(request: AiConsultRequest):
             raise
 
         steps = result.get("intermediate_steps", [])
-        ai_answer = result.get("output", "抱歉，我暂时无法回答您的问题。")
+        if steps:
+            ai_answer = result.get("output", "抱歉，我暂时无法回答您的问题。")
+        else:
+            # 无检索结果：不采用 Agent 直接输出，防止模型无依据时编造法条/案例
+            ai_answer = ("本次咨询未检索到匹配的权威法律信息。请补充更具体的问题（如合同类型、损失情况、争议焦点等），"
+                         "以便为您精准检索权威法律条文、司法解释或典型案例。")
 
     end_time = time.time()
     processing_time_ms = int((end_time - start_time) * 1000)
@@ -731,6 +741,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
 
         steps = []
         tool_context = ""
+        agent_output = ""
         try:
             # 使用 astream_events 获取实时进度及 token 统计
             async for event in agent_executor.astream_events({
@@ -760,6 +771,7 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
                 elif event_kind == "on_chain_end" and event.get("name") == "AgentExecutor":
                     result = event.get("data", {}).get("output", {})
                     steps = result.get("intermediate_steps", [])
+                    agent_output = result.get("output", "")
                     tool_context = _build_tool_context(steps)
         except Exception as e:
             logging.error(f"Agent执行失败: {type(e).__name__}: {e}")
@@ -771,6 +783,33 @@ async def consult_stream(request: AiConsultRequest) -> AsyncGenerator[str, None]
         yield _sse_event("status", f"找到 {len(steps)} 条相关信息，正在生成回答...")
 
     # ==================== 阶段 3: 流式生成（注入历史） ====================
+    if not steps:
+        # 无检索结果：复用 Agent 在阶段2生成的解答；若 Agent 未产出内容则回落固定提示
+        echo_answer = agent_output if agent_output and not agent_output.isspace() else (
+            "本次咨询未检索到匹配的权威法律信息。请补充更具体的问题（如合同类型、损失情况、争议焦点等），"
+            "以便为您精准检索权威法律条文、司法解释或典型案例。"
+        )
+        yield _sse_event("token", echo_answer)
+        total_time_ms = int((time.time() - start_time) * 1000)
+        complete_data = {
+            "type": "complete",
+            "answer": echo_answer,
+            "data_cards": [],
+            "session_id": request.session_id,
+            "user_id": request.user_id,
+            "turn_number": len(history_data) // 2 + 1,
+            "processing_time_ms": total_time_ms,
+            "token_usage": {
+                "input_tokens": token_collector.input_tokens,
+                "output_tokens": token_collector.output_tokens,
+                "total_tokens": token_collector.total_tokens,
+                "provider": "qwen",
+                "model_name": settings.OPENAI_MODEL,
+            },
+        }
+        yield f"data: {json.dumps(complete_data, ensure_ascii=False)}\n\n"
+        return
+
     stream_llm = await get_ai_config_manager().create_llm(streaming=True)
 
     # 构建完整的消息列表（不使用模板，避免工具结果中的 {} 被当作格式化变量）

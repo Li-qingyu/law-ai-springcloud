@@ -126,7 +126,7 @@ class ConfigManager:
 
     async def _from_http(self, provider: str | None = None) -> AiConfig | None:
         settings = get_settings()
-        url = f"{settings.JAVA_API_BASE_URL}/internal/ai-config/current"
+        url = f"{settings.AI_CONFIG_URL}/internal/ai-config/current"
         params = {"provider": provider} if provider else {}
         timeout = httpx.Timeout(connect=3.0, read=5.0)
 

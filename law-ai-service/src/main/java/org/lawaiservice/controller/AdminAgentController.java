@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lawaiservice.utils.HttpClient;
 import org.lawcommoncore.context.BaseContext;
 import org.lawcommoncore.result.Result;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -16,9 +17,8 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class AdminAgentController {
 
-    private static final String PYTHON_STREAM_URL = "http://localhost:8000/admin/manage/stream";
-    private static final String PYTHON_SYNC_URL = "http://localhost:8000/admin/manage";
-    private static final String PYTHON_CONFIRM_URL = "http://localhost:8000/admin/manage/confirm";
+    @Value("${python-ai-url:http://localhost:8000}")
+    private String pythonAiUrl;
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
     /**
@@ -55,7 +55,7 @@ public class AdminAgentController {
                 requestBody.put("session_id", sessionId);
 
                 // 流式调用 Python 服务
-                HttpClient.doPostJsonStreaming(PYTHON_STREAM_URL, requestBody, eventData -> {
+                HttpClient.doPostJsonStreaming(pythonAiUrl + "/admin/manage/stream", requestBody, eventData -> {
                     try {
                         JSONObject event = JSONObject.parseObject(eventData);
                         String type = event.getString("type");
@@ -116,7 +116,7 @@ public class AdminAgentController {
             requestBody.put("user_role", userRole);
             requestBody.put("session_id", request.getSessionId());
 
-            String response = HttpClient.doPostJson(PYTHON_SYNC_URL, requestBody);
+            String response = HttpClient.doPostJson(pythonAiUrl + "/admin/manage", requestBody);
             JSONObject result = JSONObject.parseObject(response);
 
             return Result.success(result);
@@ -145,7 +145,7 @@ public class AdminAgentController {
             requestBody.put("user_role", userRole);
             requestBody.put("answer", request.getAnswer());
 
-            String response = HttpClient.doPostJson(PYTHON_CONFIRM_URL, requestBody);
+            String response = HttpClient.doPostJson(pythonAiUrl + "/admin/manage/confirm", requestBody);
             JSONObject result = JSONObject.parseObject(response);
 
             // Python 返回 {"code":200,"message":"success","data":{"result":"...","status":"..."}}

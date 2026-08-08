@@ -25,6 +25,7 @@ import org.lawcommoncore.vo.AiSessionHistoryVO;
 import org.lawcommoncore.vo.GuestInfoVO;
 import org.lawcommoncore.vo.LawCaseVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -49,7 +50,8 @@ public class AIConsultController {
     @Autowired
     private TokenQuotaService tokenQuotaService;
 
-    private static final String STREAM_URL = "http://localhost:8000/v1/ai/consult/stream";
+    @Value("${python-ai-url:http://localhost:8000}")
+    private String pythonAiUrl;
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
     @PostMapping("/consult")
@@ -131,7 +133,7 @@ public class AIConsultController {
                         .build();
 
                 // 流式调用 Python 服务，逐个转发 SSE 事件
-                HttpClient.doPostJsonStreaming(STREAM_URL, request, eventData -> {
+                HttpClient.doPostJsonStreaming(pythonAiUrl + "/v1/ai/consult/stream", request, eventData -> {
                     try {
                         JSONObject event = JSONObject.parseObject(eventData);
                         String type = event.getString("type");
