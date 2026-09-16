@@ -5,6 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.lawaiservice.utils.HttpClient;
 import org.lawcommoncore.context.BaseContext;
 import org.lawcommoncore.result.Result;
+import org.lawcommonsecurity.annotation.RequireRole;
+import org.lawcommonsecurity.constant.UserRole;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -25,6 +27,7 @@ public class AdminAgentController {
      * 流式管理接口 - SSE
      */
     @GetMapping("/manage/stream")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public SseEmitter manageStream(@RequestParam String query, @RequestParam String sessionId) {
         log.info("流式管理请求: query={}, sessionId={}", query, sessionId);
 
@@ -102,6 +105,7 @@ public class AdminAgentController {
      * 同步管理接口
      */
     @PostMapping("/manage")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Result<Object> manage(@RequestBody AdminManageRequest request) {
         log.info("同步管理请求: query={}", request.getQuery());
 
@@ -130,6 +134,7 @@ public class AdminAgentController {
      * 确认接口 - 恢复被interrupt暂停的子Agent
      */
     @PostMapping("/manage/confirm")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Result<Object> manageConfirm(@RequestBody AdminConfirmRequest request) {
         log.info("确认请求: threadId={}, agentType={}, answer={}", request.getThreadId(), request.getAgentType(), request.getAnswer());
 

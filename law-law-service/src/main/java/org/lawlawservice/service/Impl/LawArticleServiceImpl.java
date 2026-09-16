@@ -12,6 +12,8 @@ import org.lawcommoncore.dto.LawArticlesPageDTO;
 import org.lawcommoncore.entity.LawArticle;
 import org.lawcommoncore.event.LawArticleSyncEvent;
 import org.lawcommoncore.result.PageResult;
+import org.lawcommonsecurity.annotation.RequireRole;
+import org.lawcommonsecurity.constant.UserRole;
 import org.lawlawservice.exception.LawArticlesException;
 import org.lawlawservice.feign.MilvusFeignClient;
 import org.lawlawservice.mapper.LawArticleMapper;
@@ -55,6 +57,7 @@ public class LawArticleServiceImpl implements LawArticleService {
      */
     @Override
     @RecordActivity(type = LAW_ADD, titleTemplate = "'添加法律条文：' + #lawArticlesDTO.articleTitle")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Transactional(rollbackFor = Exception.class)
     public void add(LawArticlesDTO lawArticlesDTO) {
         LawArticle lawArticle = new LawArticle();
@@ -85,6 +88,7 @@ public class LawArticleServiceImpl implements LawArticleService {
         return lawArticleMapper.get(id);
     }
     @RecordActivity(type = LAW_UPDATE, titleTemplate = "'更新法律条文：' + #lawArticlesDTO.articleTitle")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void update(LawArticlesDTO lawArticlesDTO) {
@@ -112,6 +116,7 @@ public class LawArticleServiceImpl implements LawArticleService {
         log.info("修改法律条文成功{}",lawArticle);
     }
     @RecordActivity(type = LAW_DELETE, titleTemplate = "'删除法律条文：ID=' + #ids")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void delete(List<Long> ids) {
@@ -125,6 +130,7 @@ public class LawArticleServiceImpl implements LawArticleService {
     }
 
     @RecordActivity(type = LAW_IMPORT, titleTemplate = "'导入法律条文从Excel：' + #file.originalFilename")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Transactional(rollbackFor = Exception.class)
     @Override
     public String importExcel(MultipartFile file,Integer bookId) {
@@ -241,16 +247,19 @@ public class LawArticleServiceImpl implements LawArticleService {
         return null;
     }
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Integer count() {
         return lawArticleMapper.count();
     }
 
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Integer countOneWeekAgo() {
         return lawArticleMapper.countOneWeekAgo();
     }
 
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public String addLawArticlesToMilvusAsync(Integer lawBookId) {
         // 1. 生成唯一任务ID
         String taskId = UUID.randomUUID().toString();

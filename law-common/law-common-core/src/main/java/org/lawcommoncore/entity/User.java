@@ -44,7 +44,7 @@ public class User implements Serializable {
     */
     private String phone;
     /**
-    * 角色：1-管理员，0-普通用户
+    * 角色：0-普通用户，1-超级管理员，2-普通管理员
     */
     private Integer role;
     /**

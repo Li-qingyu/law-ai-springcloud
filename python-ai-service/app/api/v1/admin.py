@@ -111,6 +111,7 @@ async def manage(request: AdminRequest):
             thread_id=thread_id,
             router_context=router_context,
             log_service=log_service,
+            user_role=request.user_role,
         )
 
         # ── 子Agent返回结果 ──
@@ -239,6 +240,7 @@ async def manage_stream(request: AdminStreamRequest):
                     thread_id=thread_id,
                     router_context=router_context,
                     log_service=log_service,
+                    user_role=request.user_role,
                 ),
             )
 

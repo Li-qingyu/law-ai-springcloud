@@ -4,6 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.lawcommoncore.result.Result;
 import org.lawcommoncore.vo.ActivitiesVO;
 import org.lawcommoncore.vo.WorkSpaceVO;
+import org.lawcommonsecurity.annotation.RequireRole;
+import org.lawcommonsecurity.constant.UserRole;
 import org.lawcommonsecurity.service.ActivityService;
 import org.lawcommonservice.service.WorkSpaceService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +27,7 @@ public class WorkSpcaeController {
      * 处理增长趋势
      */
     @GetMapping("/work-space/trend")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Result trend() {
         log.info("处理增长趋势");
          WorkSpaceVO workSpaceVO =workSpaceService.trend();
@@ -34,6 +37,7 @@ public class WorkSpcaeController {
      * 查询最近活动
      */
     @GetMapping("/dashboard/activities")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Result<List<ActivitiesVO>> activities(){
         log.info("查询最近活动");
         List<ActivitiesVO> activities =activityService.queryRecentActivities(8);

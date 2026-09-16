@@ -6,6 +6,11 @@ public class BaseContext {
     public static ThreadLocal<Integer> roleLocal = new ThreadLocal<>();
     public static ThreadLocal<Integer> guestIdLocal = new ThreadLocal<>();
     public static ThreadLocal<String> userTypeLocal = new ThreadLocal<>();
+    /**
+     * 内部调用标记：来自内部 Feign（X-Internal-Call）或 /internal/ 路径的请求为 true。
+     * 授权切面（RequireRoleAspect）据此跳过角色校验，保证内部链路（如 dashboard 计数）不误拦。
+     */
+    public static ThreadLocal<Boolean> internalLocal = new ThreadLocal<>();
 
     public static void setCurrentId(Integer id) {
         threadLocal.set(id);
@@ -55,11 +60,24 @@ public class BaseContext {
         userTypeLocal.remove();
     }
 
+    public static void setInternal(boolean internal) {
+        internalLocal.set(internal);
+    }
+
+    public static boolean isInternal() {
+        return Boolean.TRUE.equals(internalLocal.get());
+    }
+
+    public static void removeInternal() {
+        internalLocal.remove();
+    }
+
     public static void clear() {
         threadLocal.remove();
         roleLocal.remove();
         guestIdLocal.remove();
         userTypeLocal.remove();
+        internalLocal.remove();
     }
 
     /**

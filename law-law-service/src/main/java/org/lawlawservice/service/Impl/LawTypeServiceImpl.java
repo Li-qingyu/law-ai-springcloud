@@ -4,6 +4,8 @@ import org.lawcommoncore.annotation.RecordActivity;
 import org.lawcommoncore.dto.TypeDTO;
 import org.lawcommoncore.entity.LawType;
 import org.lawcommoncore.vo.LawTypeListVO;
+import org.lawcommonsecurity.annotation.RequireRole;
+import org.lawcommonsecurity.constant.UserRole;
 import org.lawlawservice.exception.LawTypeException;
 import org.lawlawservice.mapper.LawTypeMapper;
 import org.lawlawservice.service.LawTypeService;
@@ -34,6 +36,7 @@ public class LawTypeServiceImpl implements LawTypeService {
         return lawTypeMapper.list(name);
     }
     @RecordActivity(type = TYPE_ADD, titleTemplate = "'添加法律类型：' + #typeDTO.name")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Override
     public void add(TypeDTO typeDTO) {
         if(typeDTO == null){
@@ -46,6 +49,7 @@ public class LawTypeServiceImpl implements LawTypeService {
         lawTypeMapper.insert(typeDTO);
     }
     @RecordActivity(type = TYPE_UPDATE, titleTemplate = "'更新法律类型：' + #typeDTO.name")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Override
     public void updateLawType(TypeDTO typeDTO) {
         if(typeDTO == null)
@@ -57,6 +61,7 @@ public class LawTypeServiceImpl implements LawTypeService {
         lawTypeMapper.update(typeDTO);
     }
     @RecordActivity(type = TYPE_DELETE, titleTemplate = "'删除法律类型：' + #id")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Override
     public void delete(Long id) {
         if(id == null)
@@ -70,11 +75,13 @@ public class LawTypeServiceImpl implements LawTypeService {
     }
 
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Integer count() {
         return lawTypeMapper.count();
     }
 
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Integer countOneWeekAgo() {
         return lawTypeMapper.countOneWeekAgo();
     }

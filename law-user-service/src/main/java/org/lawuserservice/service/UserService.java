@@ -24,6 +24,11 @@ public  interface UserService {
 
     void updateStatus(Integer id, Integer status);
 
+    /**
+     * 分配角色（仅超级管理员），角色变更后会话需吊销强制重登
+     */
+    void updateRole(Integer id, Integer role);
+
     Integer count();
 
     Integer countOneWeekAgo();

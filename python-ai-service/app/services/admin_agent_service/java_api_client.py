@@ -74,7 +74,7 @@ class JavaApiClient:
         "create": "POST",
         "update": "PUT",
         "delete": "DELETE",
-        "sync": "POST",         # 默认 POST，law_article 特殊为 GET（见 _get_method）
+        "sync": "POST",         # 同步是副作用操作，统一 POST（Java 端已改为 @PostMapping）
         "sync_status": "GET",
         "count": "GET",
         "import": "POST",
@@ -84,9 +84,7 @@ class JavaApiClient:
     }
 
     # 部分 data_type+operation 的 HTTP 方法与默认不同
-    METHOD_OVERRIDE = {
-        ("law_article", "sync"): "GET",   # Java: @GetMapping("/sync")
-    }
+    METHOD_OVERRIDE = {}
 
     def __init__(self):
         settings = get_settings()

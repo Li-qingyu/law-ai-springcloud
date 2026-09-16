@@ -92,9 +92,9 @@ public class LawArticleController {
         return Result.success(lawArticleService.countOneWeekAgo());
     }
     /**
-     * 异步批量导入法条到milvus
+     * 异步批量导入法条到milvus（副作用操作，使用 POST 触发）
      */
-    @GetMapping("/sync")
+    @PostMapping("/sync")
     public Result importLawArticlesAsync(@RequestParam Integer lawBookId) {
         log.info("同步知识库：批量导入法条到milvus:{}", lawBookId);
          String taskId =lawArticleService.addLawArticlesToMilvusAsync(lawBookId);

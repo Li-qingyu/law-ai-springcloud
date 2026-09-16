@@ -2,7 +2,9 @@ package org.lawcommoncore.exception;
 
 import lombok.extern.slf4j.Slf4j;
 import org.lawcommoncore.result.Result;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.yaml.snakeyaml.constructor.DuplicateKeyException;
 
@@ -65,6 +67,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler
     public Result illegalArgumentHandler(IllegalArgumentException ex) {
         log.error("参数异常：{}", ex.getMessage());
+        return Result.error(ex.getMessage());
+    }
+
+    /**
+     * 捕获角色授权失败异常，返回 HTTP 403
+     */
+    @ExceptionHandler
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result authorizationExceptionHandler(AuthorizationException ex) {
+        log.warn("权限校验失败：{}", ex.getMessage());
         return Result.error(ex.getMessage());
     }
 

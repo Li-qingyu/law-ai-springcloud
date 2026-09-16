@@ -12,6 +12,8 @@ import org.lawcommoncore.entity.LawCase;
 import org.lawcommoncore.event.LawCaseSyncEvent;
 import org.lawcommoncore.result.PageResult;
 import org.lawcommoncore.vo.LawCaseVO;
+import org.lawcommonsecurity.annotation.RequireRole;
+import org.lawcommonsecurity.constant.UserRole;
 import org.lawlawservice.exception.LawCaseException;
 import org.lawlawservice.feign.MilvusFeignClient;
 import org.lawlawservice.mapper.LawCaseCollectionMapper;
@@ -50,6 +52,7 @@ public class LawCaseServiceImpl implements LawCaseService {
 
     @Transactional(rollbackFor = Exception.class)
     @RecordActivity(type = CASE_ADD, titleTemplate = "'添加案例：' + #lawCaseDTO.title")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Override
     public void save(LawCaseDTO lawCaseDTO) {
         LawCase lawCase = new LawCase();
@@ -81,6 +84,7 @@ public class LawCaseServiceImpl implements LawCaseService {
 
     }
     @RecordActivity(type = CASE_UPDATE, titleTemplate = "'更新案例：' + #lawCaseDTO.title")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void update(LawCaseDTO lawCaseDTO) {
@@ -93,6 +97,7 @@ public class LawCaseServiceImpl implements LawCaseService {
 
     }
     @RecordActivity(type = CASE_DELETE, titleTemplate = "'删除案例：' + #id")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void delete(Long id) {
@@ -113,6 +118,7 @@ public class LawCaseServiceImpl implements LawCaseService {
     }
 
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public void batchToggleStatus(LawCaseStatusDTO lawCaseStatusDTO) {
         if(lawCaseStatusDTO.getIds() == null){
             throw new LawCaseException("ids不能为空");
@@ -124,15 +130,19 @@ public class LawCaseServiceImpl implements LawCaseService {
     }
 
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Integer count() {
         return lawCaseMapper.count();
     }
 
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Integer countOneWeekAgo() {
         return lawCaseMapper.countOneWeekAgo();
     }
+
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public String addLawCaseToMilvusAsync() {
         //1。生成任务ID
         String taskId= UUID.randomUUID().toString();

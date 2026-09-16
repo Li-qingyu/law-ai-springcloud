@@ -7,6 +7,8 @@ import org.lawaiservice.mapper.UserTokenQuotaMapper;
 import org.lawaiservice.service.TokenQuotaService;
 import org.lawcommoncore.entity.TokenUsageLog;
 import org.lawcommoncore.entity.UserTokenQuota;
+import org.lawcommonsecurity.annotation.RequireRole;
+import org.lawcommonsecurity.constant.UserRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -121,6 +123,7 @@ public class TokenQuotaServiceImpl implements TokenQuotaService {
     }
 
     @Override
+    @RequireRole(UserRole.SUPER_ADMIN)
     public void resetUser(Integer userId) {
         userTokenQuotaMapper.resetDaily(userId);
         String month = LocalDate.now().format(monthFormatter);

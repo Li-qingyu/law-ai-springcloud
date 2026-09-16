@@ -13,16 +13,18 @@ class PermissionChecker:
 
     # 权限矩阵配置
     # 角色说明: user=普通用户(无管理权限), super_admin=超级管理员, admin=普通管理员
+    # 普通管理员(admin)的 data_management 与后端权限矩阵对齐：知识库完整维护（增删改查+导入+同步）；
+    # 文件管理、日志管理、权限管理对其不可用。—— 权限权威在后端 Java 服务层，本矩阵为过渡期执行点。
     PERMISSION_MATRIX: Dict[str, Dict[str, List[str]]] = {
         "super_admin": {
             "file_management": ["upload", "parse", "import", "list", "delete"],
-            "data_management": ["query", "create", "update", "delete", "sync", "statistics"],
+            "data_management": ["query", "query_all", "count", "create", "update", "delete", "import", "sync", "sync_status", "statistics"],
             "log_management": ["query", "statistics", "export", "cleanup"],
             "permission_management": ["query", "create", "update", "delete"],
         },
         "admin": {
-            "file_management": ["upload", "parse", "list"],
-            "data_management": ["query", "create", "update"],
+            "file_management": [],
+            "data_management": ["query", "query_all", "count", "create", "update", "delete", "import", "sync", "sync_status"],
             "log_management": [],
             "permission_management": [],
         },

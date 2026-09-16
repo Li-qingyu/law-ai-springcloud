@@ -103,7 +103,8 @@ def create_router_workflow(log_service: Optional[AdminLogService] = None):
 def invoke_sub_agent(agent_type: str, query: str, user_id: int,
                      log_id: str, thread_id: str,
                      router_context: Optional[Dict] = None,
-                     log_service: Optional[AdminLogService] = None) -> Dict[str, Any]:
+                     log_service: Optional[AdminLogService] = None,
+                     user_role: Optional[str] = None) -> Dict[str, Any]:
     """
     调用子Agent（支持 interrupt/resume）。
 
@@ -115,6 +116,7 @@ def invoke_sub_agent(agent_type: str, query: str, user_id: int,
         thread_id: 线程ID（checkpointer 用，同一会话必须保持一致）
         router_context: 路由阶段预解析的信息
         log_service: 日志服务
+        user_role: 用户角色（透传给子Agent的 guard 节点做操作级权限校验）
 
     Returns:
         {"result": "...", "status": "...", "is_pending_confirm": bool,
@@ -127,6 +129,7 @@ def invoke_sub_agent(agent_type: str, query: str, user_id: int,
         "user_id": str(user_id),
         "log_id": log_id,
         "router_context": router_context or {},
+        "user_role": user_role or "",
     }
     config = {"configurable": {"thread_id": thread_id}}
 

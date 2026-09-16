@@ -177,6 +177,20 @@ public class UserController {
         }
         return Result.success("修改成功");
     }
+
+    /**
+     * 分配角色（仅超级管理员，由服务层 @RequireRole 校验）
+     * 角色变更后删除该用户会话缓存，强制重新登录以刷新 JWT 中的 role
+     */
+    @PutMapping("/admin/users/{id}/role")
+    public Result updateRole(@PathVariable Integer id, @RequestParam Integer role) {
+        log.info("分配角色:{}, role:{}", id, role);
+        userService.updateRole(id, role);
+        // 角色写入 JWT，旧 token 携带旧角色，必须吊销会话强制重登
+        redisUtil.delete(TokenConstant.USER_TOKEN_REDIS_KEY_PREFIX + id);
+        log.info("角色已变更，已吊销会话缓存 userId:{}", id);
+        return Result.success("分配成功");
+    }
     /**
      * 统计总用户
      */

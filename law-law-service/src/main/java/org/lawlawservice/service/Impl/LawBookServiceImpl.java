@@ -6,6 +6,8 @@ import org.lawcommoncore.annotation.RecordActivity;
 import org.lawcommoncore.dto.LawBookPageDTO;
 import org.lawcommoncore.entity.LawBook;
 import org.lawcommoncore.result.PageResult;
+import org.lawcommonsecurity.annotation.RequireRole;
+import org.lawcommonsecurity.constant.UserRole;
 import org.lawlawservice.exception.LawBookException;
 import org.lawlawservice.mapper.LawArticleMapper;
 import org.lawlawservice.mapper.LawBookMapper;
@@ -52,6 +54,7 @@ public class LawBookServiceImpl implements LawBookService {
         return new PageResult(page.getTotal(), page.getResult());
     }
     @RecordActivity(type = BOOK_ADD, titleTemplate = "'添加法律书籍：' + #lawBook.name")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Override
     public void add(LawBook lawBook) {
         if(lawBook == null || lawBook.getName() == null || lawBook.getName().isEmpty()) {
@@ -60,6 +63,7 @@ public class LawBookServiceImpl implements LawBookService {
         lawBookMapper.insert(lawBook);
     }
     @RecordActivity(type = BOOK_UPDATE, titleTemplate = "'更新法律书籍：' + #lawBook.name")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Override
     public void update(LawBook lawBook) {
         if(lawBook == null || lawBook.getId() == null) {
@@ -76,6 +80,7 @@ public class LawBookServiceImpl implements LawBookService {
         lawBookMapper.update(existingBook);
     }
     @RecordActivity(type = BOOK_DELETE, titleTemplate = "'删除法律书籍：' + #ids")
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     @Override
     public void delete(List<Long> ids) {
         if(ids == null) {

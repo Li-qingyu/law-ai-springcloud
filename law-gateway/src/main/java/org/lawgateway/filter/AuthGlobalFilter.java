@@ -101,14 +101,14 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
                 Integer userId = Integer.valueOf(claims.get("userId").toString());
                 Integer role = claims.get("role", Integer.class);
 
-                // P0-C: 管理接口仅超级管理员(role=1)可访问
-                if (isAdminPath(path)) {
-                    if (role == null || role != 1) {
-                        log.warn("权限不足: userId={}, role={}, path={}", userId, role, path);
-                        ServerHttpResponse response = exchange.getResponse();
-                        response.setStatusCode(HttpStatus.FORBIDDEN);
-                        return response.setComplete();
-                    }
+                // 网关只做粗筛：普通用户(role=0/null)仅放行用户端只读浏览 + 本人资料；
+                // 管理员(role=1/2)直通，具体角色权限由各服务层 @RequireRole 切面判定。
+                if ((role == null || role == 0) && isAdminPath(path)
+                        && !isPublicReadOnlyAdminPath(path, request.getMethod().name())) {
+                    log.warn("权限不足: userId={}, role={}, path={}", userId, role, path);
+                    ServerHttpResponse response = exchange.getResponse();
+                    response.setStatusCode(HttpStatus.FORBIDDEN);
+                    return response.setComplete();
                 }
 
                 log.info("JWT校验通过，用户id: {}, 角色: {}, 路径: {}", userId, role, path);
@@ -127,13 +127,37 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         }
     }
 
-    private static final List<String> ROLE_REQUIRED_PATHS = List.of(
-            "/admin/ai-config/**",
-            "/admin/token/**"
+    // 所有 /admin/** 均视为管理路径：游客一律拒绝；
+    // 普通用户(role=0)仅放行 isPublicReadOnlyAdminPath 中声明的只读浏览路径；
+    // 管理员(role=1/2)直通，具体角色权限由各服务层 @RequireRole 切面判定。
+    private static final String ADMIN_PATH_PATTERN = "/admin/**";
+
+    // 普通用户可访问的管理路径白名单（只读浏览 + 本人资料），
+    // 与用户端页面实际调用的接口保持一致（案例/法典浏览复用这些只读接口）。
+    private static final List<String> PUBLIC_READ_ONLY_ADMIN_PATHS = List.of(
+            "GET /admin/case/**",
+            "GET /admin/law-articles/**",
+            "GET /admin/law-books/**",
+            "GET /admin/types/**",
+            "GET /admin/users/*"
     );
 
     private boolean isAdminPath(String path) {
-        return ROLE_REQUIRED_PATHS.stream().anyMatch(pattern -> PATH_MATCHER.match(pattern, path));
+        return PATH_MATCHER.match(ADMIN_PATH_PATTERN, path);
+    }
+
+    /**
+     * 判断普通用户的"管理路径只读白名单"命中情况：
+     * 白名单条目格式为 "METHOD pattern"，要求 HTTP 方法与路径同时匹配；
+     * 带路径参数的写操作（如 POST /admin/case）因方法不匹配而被拒绝。
+     */
+    private boolean isPublicReadOnlyAdminPath(String path, String method) {
+        return PUBLIC_READ_ONLY_ADMIN_PATHS.stream().anyMatch(entry -> {
+            int spaceIdx = entry.indexOf(' ');
+            String allowedMethod = entry.substring(0, spaceIdx);
+            String pattern = entry.substring(spaceIdx + 1);
+            return allowedMethod.equalsIgnoreCase(method) && PATH_MATCHER.match(pattern, path);
+        });
     }
 
     private boolean isWhitelist(String path) {

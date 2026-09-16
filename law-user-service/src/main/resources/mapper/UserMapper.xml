@@ -32,6 +32,7 @@
             <if test="email != null and email != ''">email=#{email},</if>
             <if test="phone != null and phone != ''">phone=#{phone},</if>
             <if test="status != null">status=#{status},</if>
+            <if test="role != null">role=#{role},</if>
             <if test="updateTime != null">update_time=#{updateTime},</if>
         </set> where id=#{id}
     </update>

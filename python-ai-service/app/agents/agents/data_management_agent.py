@@ -21,6 +21,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.tools.adminTool.data_management_tool import DataManagementTool
 from app.services.admin_agent_service.admin_log_service import AdminLogService
+from app.services.admin_agent_service.permission_checker import PermissionChecker
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -121,6 +122,7 @@ class DataManagementState(TypedDict):
     router_context: dict                           # 路由阶段预解析的信息
     resume_value: str                              # interrupt 恢复时用户传入的值
     pending_clarification: str                     # 待用户补充的追问内容
+    user_role: str                                 # 用户角色（guard 节点做操作级权限校验）
 
 
 def create_init_node():
@@ -770,7 +772,11 @@ def create_guard_node():
     1. 错误去重：如果上一轮同样的工具调用失败了，过滤掉并注入错误提示
     2. 调用限流：防止连续两次完全相同的调用
     3. 动态轮数：根据调用历史调整 max_rounds
+    4. 权限兜底：按用户角色对每个工具调用的 operation 做 action 级校验，
+       未授权的操作回填拒绝 ToolMessage（双保险：路由阶段已做过一次 action 校验）
     """
+    _permission_checker = PermissionChecker()
+
     def guard_node(state: DataManagementState) -> Dict[str, Any]:
         messages = state.get("messages", [])
         if not messages:
@@ -779,6 +785,8 @@ def create_guard_node():
         last_message = messages[-1]
         if not (hasattr(last_message, "tool_calls") and last_message.tool_calls):
             return {}
+
+        user_role = state.get("user_role") or "user"
 
         # 动态调整轮数
         new_max_rounds = _adjust_max_rounds(state)
@@ -798,6 +806,22 @@ def create_guard_node():
 
         for tc in current_calls:
             sig = _tool_signature(tc)
+
+            # ── 权限兜底：operation 不在该角色允许集合内 → 拒绝 ──
+            args = tc.get("args", {})
+            operation = args.get("operation", "")
+            data_type = args.get("data_type", "")
+            if operation:
+                if not _permission_checker.check(user_role, "data_management", operation):
+                    error_messages.append(ToolMessage(
+                        content=f"权限不足：您的角色 [{user_role}] 无权执行 [{operation}] 操作（{data_type}）。"
+                                f"请如实告知用户该操作未被授权，不要重试其他变体。",
+                        tool_call_id=tc["id"],
+                        name=tc["name"],
+                    ))
+                    new_history.append({"signature": sig, "success": False})
+                    continue
+
             if sig in failed_signatures:
                 # 这个调用之前已经失败过，过滤掉
                 error_msg = f"该操作已失败（签名: {sig}），不允许重复调用相同参数。请调整参数或告知用户操作失败。"
@@ -812,9 +836,9 @@ def create_guard_node():
                 valid_calls.append(tc)
                 new_history.append({"signature": sig, "success": True})
 
-        # 如果所有调用都被过滤，直接让 LLM 重新思考
+        # 所有调用都被过滤（权限/去重）→ 注入错误提示让 LLM 重新决策或结束
         if not valid_calls and error_messages:
-            logger.warning("Guard: 所有工具调用均为重复失败调用，注入错误提示让 LLM 重新决策")
+            logger.warning("Guard: 所有工具调用均被过滤（权限不足或重复失败），注入错误提示让 LLM 重新决策")
             return {
                 "messages": error_messages,
                 "call_history": new_history,
@@ -822,16 +846,23 @@ def create_guard_node():
                 "max_rounds": new_max_rounds,
             }
 
-        # 部分调用被过滤：替换 AIMessage 中的 tool_calls 为有效调用 + 补充错误消息
+        # 部分调用被过滤：注入拒绝/错误提示；保留有效调用继续执行
         if error_messages:
-            logger.info(f"Guard: 过滤 {len(error_messages)} 个重复调用，保留 {len(valid_calls)} 个有效调用")
-            # 替换最后一条消息的 tool_calls
-            filtered_ai_message = AIMessage(
-                content=last_message.content,
-                tool_calls=valid_calls,
-            )
+            logger.info(f"Guard: 过滤 {len(error_messages)} 个被拒调用，保留 {len(valid_calls)} 个有效调用")
+
+            # 替换最后一条消息的 tool_calls 为有效调用
+            if valid_calls:
+                filtered_ai_message = AIMessage(
+                    content=last_message.content,
+                    tool_calls=valid_calls,
+                )
+                return {
+                    "messages": [filtered_ai_message] + error_messages,
+                    "call_history": new_history,
+                    "max_rounds": new_max_rounds,
+                }
             return {
-                "messages": [filtered_ai_message] + error_messages,
+                "messages": error_messages,
                 "call_history": new_history,
                 "max_rounds": new_max_rounds,
             }

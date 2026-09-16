@@ -14,6 +14,8 @@ import org.lawcommoncore.vo.DailyTokenStatsVO;
 import org.lawcommoncore.vo.DailyTokenUsageVO;
 import org.lawcommoncore.vo.ModelUsageVO;
 import org.lawcommoncore.vo.TokenStatsVO;
+import org.lawcommonsecurity.annotation.RequireRole;
+import org.lawcommonsecurity.constant.UserRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,6 +27,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/admin/token")
+@RequireRole(UserRole.SUPER_ADMIN)
 @Slf4j
 public class AdminTokenQuotaController {
 

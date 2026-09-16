@@ -173,9 +173,14 @@ def create_check_permission_node(log_service: Optional[AdminLogService] = None):
         if state.get("result"):
             return {}
 
-        # 权限检查
+        # 权限检查：传入意图分类阶段预提取的 operation 作为 action，
+        # 使 action 级权限矩阵真正生效（如普通管理员的 data_management 逐操作判定）
         checker = _get_permission_checker()
-        has_permission = checker.check(user_role, task_type)
+        entities = state.get("task_params_parsed") or {}
+        action = None
+        if isinstance(entities, dict):
+            action = entities.get("operation") or None
+        has_permission = checker.check(user_role, task_type, action)
 
         if not has_permission:
             error_msg = f"权限不足：您的角色 [{user_role}] 无权执行 [{task_type}] 类型的操作"

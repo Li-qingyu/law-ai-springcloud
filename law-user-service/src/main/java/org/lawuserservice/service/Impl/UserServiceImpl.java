@@ -2,12 +2,16 @@ package org.lawuserservice.service.Impl;
 
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
+import lombok.extern.slf4j.Slf4j;
 import org.lawcommoncore.annotation.RecordActivity;
 import org.lawcommoncore.constant.PasswordConstant;
+import org.lawcommoncore.context.BaseContext;
 import org.lawcommoncore.dto.*;
 import org.lawcommoncore.entity.User;
 import org.lawcommoncore.result.PageResult;
 import org.lawcommoncore.vo.LoginVO;
+import org.lawcommonsecurity.annotation.RequireRole;
+import org.lawcommonsecurity.constant.UserRole;
 import org.lawuserservice.exception.RegisterException;
 import org.lawuserservice.exception.UserException;
 import org.lawuserservice.mapper.UserMapper;
@@ -22,6 +26,7 @@ import java.time.LocalDateTime;
 
 import static org.lawcommoncore.constant.ActivitiesConstant.*;
 
+@Slf4j
 @Service
 public class UserServiceImpl implements UserService {
     @Autowired
@@ -42,6 +47,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @RequireRole(UserRole.SUPER_ADMIN)
     public PageResult list(UserPageQuery userPageQuery) {
         PageHelper.startPage(userPageQuery.getPage(), userPageQuery.getPageSize());
         Page<User> page =  userMapper.list(userPageQuery);
@@ -73,6 +79,7 @@ public class UserServiceImpl implements UserService {
         return true;
     }
     @RecordActivity(type = USER_ADD, titleTemplate = "'添加用户：' + #userRegisterDTO.username")
+    @RequireRole(UserRole.SUPER_ADMIN)
     @Override
     public void  save(UserRegisterDTO userRegisterDTO) {
         User user = new User();
@@ -86,12 +93,19 @@ public class UserServiceImpl implements UserService {
     @RecordActivity(type = USER_UPDATE, titleTemplate = "'更新用户：' + #userDTO.username")
     @Override
     public void update(UserDTO userDTO) {
+        // 归属校验：非超级管理员只能修改自己的资料，防止普通用户/普通管理员借本接口篡改他人
+        UserRole current = UserRole.of(BaseContext.getCurrentRole());
+        if (current != UserRole.SUPER_ADMIN
+                && (userDTO.getId() == null || !userDTO.getId().equals(BaseContext.getCurrentId()))) {
+            throw new UserException("权限不足：只能修改本人的资料");
+        }
         User user = new User();
         BeanUtils.copyProperties(userDTO, user);
         user.setUpdateTime(LocalDateTime.now());
         userMapper.update(user);
     }
     @RecordActivity(type = USER_DELETE, titleTemplate = "'删除id为' + #id + '的用户'")
+    @RequireRole(UserRole.SUPER_ADMIN)
     @Override
     public void delete(Integer id) {
         //先检查id是否为空，在检查是否启用和存在
@@ -121,6 +135,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @RequireRole(UserRole.SUPER_ADMIN)
     public void updateStatus(Integer id, Integer status) {
         if(id == null){
             throw new UserException("id不能为空");
@@ -136,12 +151,35 @@ public class UserServiceImpl implements UserService {
 
     }
 
+    /**
+     * 分配角色：校验角色值合法后写入；调用方（Controller）负责吊销该用户的 Redis 会话强制重登
+     */
     @Override
+    @RequireRole(UserRole.SUPER_ADMIN)
+    public void updateRole(Integer id, Integer role) {
+        if (id == null) {
+            throw new UserException("id不能为空");
+        }
+        if (role == null || (role != 0 && role != 1 && role != 2)) {
+            throw new UserException("非法的角色值：" + role);
+        }
+        User user = new User();
+        user.setId(id);
+        user.setUpdateTime(LocalDateTime.now());
+        user.setRole(role);
+        userMapper.update(user);
+        log.info("用户角色{}",user.getRole());
+        log.info("用户角色已变更 userId={}, role={}", id, role);
+    }
+
+    @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Integer count() {
         return userMapper.count();
     }
 
     @Override
+    @RequireRole({UserRole.ADMIN, UserRole.SUPER_ADMIN})
     public Integer countOneWeekAgo() {
         return userMapper.countOneWeekAgo();
     }
