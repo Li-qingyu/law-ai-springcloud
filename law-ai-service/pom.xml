@@ -58,6 +58,12 @@
             <artifactId>spring-ai-advisors-vector-store</artifactId>
         </dependency>
 
+        <!-- MCP Server(STATELESS Streamable HTTP,供 Python 端调用;版本由 spring-ai.version=1.1.2 管理) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+        </dependency>
+
         <!-- Milvus -->
         <dependency>
             <groupId>io.milvus</groupId>

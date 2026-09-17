@@ -25,6 +25,8 @@ class AdminRequest(BaseModel):
     user_role: str
     session_id: Optional[str] = None
     task_params: Optional[Dict[str, Any]] = None
+    # 用户 token（MCP 工具调用凭证,Java 权威校验;不入日志不落缓存）
+    token: Optional[str] = None
 
 class AdminConfirmRequest(BaseModel):
     """删除确认/追问补充请求模型"""
@@ -33,6 +35,7 @@ class AdminConfirmRequest(BaseModel):
     answer: str  # "yes" / "no" 或用户补充的信息
     user_id: int
     user_role: str
+    token: Optional[str] = None
 
 class AdminStreamRequest(BaseModel):
     """管理员流式请求模型"""
@@ -41,6 +44,7 @@ class AdminStreamRequest(BaseModel):
     user_role: str
     session_id: Optional[str] = None
     task_params: Optional[Dict[str, Any]] = None
+    token: Optional[str] = None
 
 class AdminResponse(BaseModel):
     """管理员响应模型"""
@@ -112,6 +116,7 @@ async def manage(request: AdminRequest):
             router_context=router_context,
             log_service=log_service,
             user_role=request.user_role,
+            token=request.token,
         )
 
         # ── 子Agent返回结果 ──
@@ -160,6 +165,7 @@ async def manage_confirm(request: AdminConfirmRequest):
             thread_id=request.thread_id,
             user_answer=request.answer,
             log_service=log_service,
+            user_role=request.user_role,
         )
 
         return AdminResponse(
@@ -241,6 +247,7 @@ async def manage_stream(request: AdminStreamRequest):
                     router_context=router_context,
                     log_service=log_service,
                     user_role=request.user_role,
+                    token=request.token,
                 ),
             )
 

@@ -24,6 +24,18 @@ public class AdminAgentController {
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
     /**
+     * 取当前请求的原始用户 token(MCP 凭证透传源;与 FeignUserContextInterceptor 同取法)。
+     * 注意:SSE 接口的 token 须在请求线程读取(executor 线程里 RequestContextHolder 已不在)。
+     */
+    private String currentUserToken() {
+        var attrs = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        if (attrs instanceof org.springframework.web.context.request.ServletRequestAttributes s) {
+            return s.getRequest().getHeader("token");
+        }
+        return null;
+    }
+
+    /**
      * 流式管理接口 - SSE
      */
     @GetMapping("/manage/stream")
@@ -38,6 +50,8 @@ public class AdminAgentController {
         log.info("用户信息: userId={}, role={}, roleStr={}", currentUserId, currentRole, userRole);
 
         SseEmitter emitter = new SseEmitter(120000L);
+        // token 必须在请求线程内读取(executor 线程中 RequestContextHolder 不可用)
+        String userToken = currentUserToken();
 
         emitter.onTimeout(() -> {
             log.warn("SSE 连接超时: sessionId={}", sessionId);
@@ -50,12 +64,13 @@ public class AdminAgentController {
 
         executorService.execute(() -> {
             try {
-                // 构建请求体
+                // 构建请求体(透传用户 token:MCP 工具调用凭证,Python 侧仅内存持有)
                 JSONObject requestBody = new JSONObject();
                 requestBody.put("query", query);
                 requestBody.put("user_id", currentUserId);
                 requestBody.put("user_role", userRole);
                 requestBody.put("session_id", sessionId);
+                requestBody.put("token", userToken);
 
                 // 流式调用 Python 服务
                 HttpClient.doPostJsonStreaming(pythonAiUrl + "/admin/manage/stream", requestBody, eventData -> {
@@ -119,6 +134,7 @@ public class AdminAgentController {
             requestBody.put("user_id", currentUserId);
             requestBody.put("user_role", userRole);
             requestBody.put("session_id", request.getSessionId());
+            requestBody.put("token", currentUserToken());
 
             String response = HttpClient.doPostJson(pythonAiUrl + "/admin/manage", requestBody);
             JSONObject result = JSONObject.parseObject(response);
@@ -149,6 +165,7 @@ public class AdminAgentController {
             requestBody.put("user_id", currentUserId);
             requestBody.put("user_role", userRole);
             requestBody.put("answer", request.getAnswer());
+            requestBody.put("token", currentUserToken());
 
             String response = HttpClient.doPostJson(pythonAiUrl + "/admin/manage/confirm", requestBody);
             JSONObject result = JSONObject.parseObject(response);

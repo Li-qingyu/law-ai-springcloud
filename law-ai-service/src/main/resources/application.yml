@@ -20,6 +20,19 @@ spring:
       namespace: ${NACOS_NAMESPACE:}
       discovery:
         group: DEFAULT_GROUP
+  ai:
+    mcp:
+      server:
+        name: law-ai-mcp-server
+        version: 1.0.0
+        type: SYNC                # 工具方法均为同步阻塞业务调用
+        protocol: STATELESS       # 无状态 Streamable HTTP,单端点 POST /mcp,每请求独立校验,无串 token 载体
+        annotation-scanner:
+          enabled: true
+        capabilities:
+          tool: true
+          resource: false
+          prompt: false
 
 
 

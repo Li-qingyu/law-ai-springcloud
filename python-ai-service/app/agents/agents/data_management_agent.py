@@ -19,12 +19,29 @@ from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, interrupt
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.tools.adminTool.data_management_tool import DataManagementTool
 from app.services.admin_agent_service.admin_log_service import AdminLogService
 from app.services.admin_agent_service.permission_checker import PermissionChecker
+from app.services.mcp_service.action_tool_map import TOOL_TO_ACTION
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _run_async(coro):
+    """构建期(非事件循环线程)执行 async 工具拉取的桥接助手"""
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None:
+        # 已在事件循环内(如经 run_in_executor 的 worker 是新线程,通常无 loop);
+        # 保底另开线程跑,避免 loop 冲突
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            return ex.submit(asyncio.run, coro).result()
+    return asyncio.run(coro)
+
 
 SYSTEM_PROMPT = """你是一个法律咨询管理后台的数据管理助手。你的职责是理解管理员的自然语言指令，调用合适的工具完成数据操作。
 
@@ -123,6 +140,7 @@ class DataManagementState(TypedDict):
     resume_value: str                              # interrupt 恢复时用户传入的值
     pending_clarification: str                     # 待用户补充的追问内容
     user_role: str                                 # 用户角色（guard 节点做操作级权限校验）
+    token: str                                     # 用户 token（MCP 工具调用凭证,仅内存持有）
 
 
 def create_init_node():
@@ -239,15 +257,13 @@ def _extract_suggested_values(question: str) -> dict:
 
 
 def _find_last_failed_tool_call(messages: list) -> Optional[dict]:
-    """从消息历史中找到最近一次因缺少参数失败的工具调用"""
+    """从消息历史中找到最近一次因缺少参数失败的 MCP 工具调用(细粒度工具名在映射表内)"""
     for msg in reversed(messages):
         if not isinstance(msg, AIMessage) or not msg.tool_calls:
             continue
         for tc in msg.tool_calls:
-            if tc.get("name") == "data_management":
-                args = tc.get("args", {})
-                if args.get("operation") and args.get("data_type"):
-                    return tc
+            if tc.get("name", "") in TOOL_TO_ACTION:
+                return tc
     return None
 
 
@@ -317,31 +333,29 @@ def _try_resume_with_code(
         logger.info("代码兜底: 未找到任何可提取的值")
         return None
 
-    # 合并原始参数和建议值
+    # 合并原始参数和建议值(MCP 工具参数是扁平的:直接把建议值合并进 args)
     original_args = dict(last_tc["args"])
     original_params = dict(original_args.get("params", {}))
     for k, v in suggested.items():
-        if k not in original_params or not original_params[k]:
-            original_params[k] = v
-    original_args["params"] = original_params
+        if k not in original_args or not original_args[k]:
+            original_args[k] = v
+    original_args.pop("params", None)
 
     # 检查是否所有必填参数都有值
     missing_text = missing_params[0]
     required_fields = re.findall(r'(\w+)\(', missing_text)
-    still_missing = [f for f in required_fields if f not in original_params or not original_params[f]]
+    still_missing = [f for f in required_fields if f not in original_args or not original_args[f]]
     if still_missing:
         logger.info(f"代码兜底: 仍有缺失参数 {still_missing}，无法直接重试")
         return None
 
-    # 直接调用工具
-    logger.info(f"代码兜底: 直接调用工具, args={original_args}")
-    tool = DataManagementTool()
+    # 直接调用 MCP 工具(与 LLM 绑定同源;token 来自 state)
+    logger.info(f"代码兜底: 直接调用 MCP 工具 {last_tc.get('name')}, args-keys={list(original_args.keys())}")
+    token = state.get("token") or ""
     try:
-        result = tool._run(
-            operation=original_args.get("operation"),
-            data_type=original_args.get("data_type"),
-            params=original_params,
-        )
+        from app.services.mcp_service.mcp_client import call_tool_direct
+        raw = _run_async(call_tool_direct(last_tc["name"], original_args, token or None))
+        result = "".join(c.text for c in raw.content) if getattr(raw, "content", None) else str(raw)
         logger.info(f"代码兜底: 工具执行结果: {result[:200]}")
 
         tool_message = ToolMessage(content=result, tool_call_id=last_tc["id"], name=last_tc["name"])
@@ -364,16 +378,18 @@ def _try_resume_with_code(
         return None
 
 
-def create_agent_node(log_service: Optional[AdminLogService] = None):
+def create_agent_node(log_service: Optional[AdminLogService] = None,
+                      tools: Optional[list] = None):
     """
     创建 LLM Agent 节点。
     每次被调用时，将系统提示 + 用户原始问题 + 历史工具交互一起发给 LLM，
     由 LLM 决定是继续调工具还是输出最终回复。
+    tools 由工厂传入(MCP 绑定期预筛选后的列表)。
     """
     _log_service = log_service or AdminLogService()
 
     llm = _create_llm()
-    tools = [DataManagementTool()]
+    tools = tools or []
     llm_with_tools = llm.bind_tools(tools)
 
     def agent_node(state: DataManagementState) -> Dict[str, Any]:
@@ -548,7 +564,7 @@ def _is_clarification_question(content: str) -> bool:
 
 
 def _has_pending_delete(state: DataManagementState) -> bool:
-    """检查是否有待执行的删除操作"""
+    """检查是否有待执行的删除操作(MCP 细粒度工具名 == *_delete)"""
     messages = state.get("messages", [])
     if not messages:
         return False
@@ -556,8 +572,8 @@ def _has_pending_delete(state: DataManagementState) -> bool:
     if not (hasattr(last_message, "tool_calls") and last_message.tool_calls):
         return False
     return any(
-        tc["name"] == "data_management" and tc["args"].get("operation") == "delete"
-        for tc in last_message.tool_calls
+        mapping is not None and mapping[1] == "delete"
+        for mapping in (TOOL_TO_ACTION.get(tc.get("name", "")) for tc in last_message.tool_calls)
     )
 
 
@@ -807,11 +823,11 @@ def create_guard_node():
         for tc in current_calls:
             sig = _tool_signature(tc)
 
-            # ── 权限兜底：operation 不在该角色允许集合内 → 拒绝 ──
-            args = tc.get("args", {})
-            operation = args.get("operation", "")
-            data_type = args.get("data_type", "")
-            if operation:
+            # ── 权限兜底(L2):MCP 细粒度工具名反查 (data_type, operation) → 矩阵校验 ──
+            tool_name = tc.get("name", "")
+            mapping = TOOL_TO_ACTION.get(tool_name)
+            if mapping is not None:
+                data_type, operation = mapping
                 if not _permission_checker.check(user_role, "data_management", operation):
                     error_messages.append(ToolMessage(
                         content=f"权限不足：您的角色 [{user_role}] 无权执行 [{operation}] 操作（{data_type}）。"
@@ -901,7 +917,9 @@ def create_tool_result_collector_node():
     return collect_node
 
 
-def create_data_management_agent(log_service: Optional[AdminLogService] = None):
+def create_data_management_agent(log_service: Optional[AdminLogService] = None,
+                                 user_role: Optional[str] = None,
+                                 token: Optional[str] = None):
     """
     创建数据管理Agent — LLM + Tools 多轮循环模式
 
@@ -913,14 +931,33 @@ def create_data_management_agent(log_service: Optional[AdminLogService] = None):
     5. 超时/轮数耗尽 → aggregate 节点聚合部分结果
     6. 回到 Agent：LLM 看到工具结果，决定继续调工具还是输出最终回复
     7. 循环直到 LLM 不再调用工具（或达到限制）
+
+    MCP 化(实施设计文档 §4.3):
+    - tools 来自 MCP(law-ai-server 经 token 拉取)经绑定期预筛选(tool_filter,按 user_role);
+    - 绑定期白名单 = L1 主防线:越权工具对 LLM 不可见;
+    - DataManagementTool 退役(不再绑定),guard 保留做 L2 兜底。
     """
-    tools = [DataManagementTool()]
+    from app.services.mcp_service.tool_filter import get_allowed_tools
+
+    if token:
+        from app.services.mcp_service.mcp_client import list_all_tools
+        try:
+            mcp_tools = _run_async(list_all_tools(token))
+            tools = get_allowed_tools("data_management", user_role or "user", mcp_tools)
+        except Exception as e:
+            # fail-closed:MCP 不可达 → 空工具集(绝不降级本地矩阵)
+            logger.error("MCP 工具拉取失败,绑定为空集(白名单 fail-closed): %s", e)
+            tools = []
+    else:
+        # 无 token(MCP 化前的旧调用路径):绑定空集,行为=不可执行任何 MCP 工具
+        logger.warning("create_data_management_agent 未收到 token,工具绑定为空集")
+        tools = []
 
     workflow = StateGraph(DataManagementState)
 
     # 添加节点
     workflow.add_node("init", create_init_node())
-    workflow.add_node("agent", create_agent_node(log_service))
+    workflow.add_node("agent", create_agent_node(log_service, tools=tools))
     workflow.add_node("guard", create_guard_node())
     workflow.add_node("tools", ToolNode(tools))
     workflow.add_node("collect_results", create_tool_result_collector_node())

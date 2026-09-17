@@ -24,17 +24,26 @@ logger = logging.getLogger(__name__)
 
 # ─── 子Agent单例缓存 ───
 # 每个子Agent编译后带独立的 MemorySaver checkpointer，
-# 必须在进程生命周期内保持同一实例，否则 interrupt 状态丢失。
-_sub_agent_cache: Dict[str, Any] = {}
+# 同一实例必须保持，否则 interrupt 状态丢失。
+# 缓存 key = (agent_type, user_role)：绑定期预筛选(L1)令工具集按角色不同，
+# 角色混用单例会造成先入者工具集污染后入者(串权通道,实施设计文档 §4.3.0)。
+# interrupt 状态隔离仍靠 thread_id(会话级),与缓存 key 解耦。
+_sub_agent_cache: Dict[tuple, Any] = {}
 
 
-def get_sub_agent(agent_type: str, log_service: Optional[AdminLogService] = None):
+def get_sub_agent(agent_type: str, log_service: Optional[AdminLogService] = None,
+                  user_role: Optional[str] = None,
+                  token: Optional[str] = None):
     """
-    获取子Agent单例（带 checkpointer）。
-    同一 agent_type 在进程内始终返回同一实例，确保 interrupt/resume 状态不丢失。
+    获取子Agent实例（带 checkpointer,按 (agent_type, user_role) 分仓缓存）。
+    同一 (agent_type, user_role) 在进程内始终返回同一实例,确保 interrupt/resume 状态不丢失。
+    user_role 为空时按 "user" 处理(工具绑定将得到空集,即不可用,符合白名单语义)。
+    token 仅在「首次构建该角色实例」时用于拉取 MCP 工具(元数据与角色/用户无关);
+    已缓存的实例直接复用(工具集只由角色决定)。
     """
-    if agent_type in _sub_agent_cache:
-        return _sub_agent_cache[agent_type]
+    cache_key = (agent_type, user_role or "user")
+    if cache_key in _sub_agent_cache:
+        return _sub_agent_cache[cache_key]
 
     from app.agents import (
         create_file_management_agent,
@@ -54,9 +63,9 @@ def get_sub_agent(agent_type: str, log_service: Optional[AdminLogService] = None
     if not factory:
         raise ValueError(f"未知的子Agent类型: {agent_type}")
 
-    agent = factory(log_service)
-    _sub_agent_cache[agent_type] = agent
-    logger.info(f"创建子Agent单例: {agent_type}")
+    agent = factory(log_service, user_role=user_role, token=token)
+    _sub_agent_cache[cache_key] = agent
+    logger.info("创建子Agent单例: %s (role=%s)", agent_type, cache_key[1])
     return agent
 
 
@@ -104,7 +113,8 @@ def invoke_sub_agent(agent_type: str, query: str, user_id: int,
                      log_id: str, thread_id: str,
                      router_context: Optional[Dict] = None,
                      log_service: Optional[AdminLogService] = None,
-                     user_role: Optional[str] = None) -> Dict[str, Any]:
+                     user_role: Optional[str] = None,
+                     token: Optional[str] = None) -> Dict[str, Any]:
     """
     调用子Agent（支持 interrupt/resume）。
 
@@ -116,13 +126,15 @@ def invoke_sub_agent(agent_type: str, query: str, user_id: int,
         thread_id: 线程ID（checkpointer 用，同一会话必须保持一致）
         router_context: 路由阶段预解析的信息
         log_service: 日志服务
-        user_role: 用户角色（透传给子Agent的 guard 节点做操作级权限校验）
+        user_role: 用户角色（透传给子Agent的 guard 节点做操作级权限校验；同时也是
+                   子Agent工具缓存分仓 key——角色不同绑定工具集不同）
+        token: 用户 token（MCP 工具调用凭证,只在本会话内存持有,不入日志不落缓存）
 
     Returns:
         {"result": "...", "status": "...", "is_pending_confirm": bool,
          "confirm_question": "...", "thread_id": "..."}
     """
-    agent = get_sub_agent(agent_type, log_service)
+    agent = get_sub_agent(agent_type, log_service, user_role=user_role, token=token)
 
     sub_input = {
         "query": query,
@@ -130,6 +142,7 @@ def invoke_sub_agent(agent_type: str, query: str, user_id: int,
         "log_id": log_id,
         "router_context": router_context or {},
         "user_role": user_role or "",
+        "token": token or "",
     }
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -170,7 +183,8 @@ def invoke_sub_agent(agent_type: str, query: str, user_id: int,
 
 
 def resume_sub_agent(agent_type: str, thread_id: str, user_answer: str,
-                     log_service: Optional[AdminLogService] = None) -> Dict[str, Any]:
+                     log_service: Optional[AdminLogService] = None,
+                     user_role: Optional[str] = None) -> Dict[str, Any]:
     """
     恢复被 interrupt 暂停的子Agent。
 
@@ -179,13 +193,14 @@ def resume_sub_agent(agent_type: str, thread_id: str, user_answer: str,
         thread_id: 线程ID（必须与 interrupt 时一致）
         user_answer: 用户确认/取消的回答
         log_service: 日志服务
+        user_role: 用户角色（与 invoke 相同分仓取实例）
 
     Returns:
         {"result": "...", "status": "..."}
     """
     from langgraph.types import Command
 
-    agent = get_sub_agent(agent_type, log_service)
+    agent = get_sub_agent(agent_type, log_service, user_role=user_role)
     config = {"configurable": {"thread_id": thread_id}}
 
     logger.info(f"[{agent_type}] 恢复子Agent，thread_id={thread_id}，answer={user_answer}")

@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     JAVA_API_TIMEOUT: int = 30
     JAVA_API_RETRY_COUNT: int = 3
 
+    # MCP 配置(管理端 Agent 经 MCP 调 law-ai-service 工具面)
+    MCP_LAW_AI_URL: str = "http://localhost:8083/mcp"
+
     # AI 配置获取地址（RAG config_manager 调用 law-ai-service 的 /internal/ai-config）
     AI_CONFIG_URL: str = "http://localhost:8083"
 

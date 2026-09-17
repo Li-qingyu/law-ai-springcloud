@@ -30,15 +30,21 @@ public class JwtTokenInterceptor implements HandlerInterceptor {
      */
     @Override
     public boolean preHandle(HttpServletRequest  request, HttpServletResponse response, Object handler) throws  Exception {
-        // 内部服务调用或内部接口，置内部标记后放行（授权切面据此跳过角色校验）
-        String internalCall = request.getHeader("X-Internal-Call");
-        if ("true".equals(internalCall)) {
-            BaseContext.setInternal(true);
-            return true;
-        }
-        if (request.getRequestURI().startsWith("/internal/")) {
-            BaseContext.setInternal(true);
-            return true;
+        // MCP 端点(/mcp)强制走用户 token 校验分支:此入口由 Python 等客户端携带真实用户凭证调用,
+        // 绝不允许 X-Internal-Call / /internal/ 免鉴短路(MCP 服务化设计红线)
+        if (request.getRequestURI().equals("/mcp")) {
+            log.debug("MCP端点请求,强制走用户token校验:{}", request.getMethod());
+        } else {
+            // 内部服务调用或内部接口，置内部标记后放行（授权切面据此跳过角色校验）
+            String internalCall = request.getHeader("X-Internal-Call");
+            if ("true".equals(internalCall)) {
+                BaseContext.setInternal(true);
+                return true;
+            }
+            if (request.getRequestURI().startsWith("/internal/")) {
+                BaseContext.setInternal(true);
+                return true;
+            }
         }
 
         String token = request.getHeader(jwtProperties.getAdminTokenName());

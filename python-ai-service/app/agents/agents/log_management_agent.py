@@ -60,7 +60,7 @@ def create_execute_node(log_service: Optional[AdminLogService] = None):
         return {"result": result}
     return execute_log_management
 
-def create_log_management_agent(log_service: Optional[AdminLogService] = None):
+def create_log_management_agent(log_service: Optional[AdminLogService] = None, user_role: Optional[str] = None, token: Optional[str] = None):  # 二期 MCP 化;参数暂收不用(保持工厂调用签名统一)
     """创建日志管理Agent"""
     workflow = StateGraph(LogManagementState)
 
