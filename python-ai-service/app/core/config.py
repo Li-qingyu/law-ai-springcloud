@@ -91,5 +91,5 @@ def get_settings():
 
 if __name__ == '__main__':
     settings=get_settings()
-    print(settings.DEBUG)
+    print(settings)
     print(settings.MILVUS_HOST)
